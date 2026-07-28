@@ -28,4 +28,4 @@
 - [x] SheetJS 与 JSZip 第三方许可完整保留；
 - [x] 项目代码采用 Apache License 2.0，第三方许可单独保留；
 - [x] 公开仓库从脱敏白名单导出建立全新历史，而非推送内部仓库历史。
-- [ ] GitHub v1.0.0 Release 提供两种 ZIP 和各自 SHA-256 校验文件。
+- [x] GitHub v1.0.0 Release 提供两种 ZIP 和各自 SHA-256 校验文件。

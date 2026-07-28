@@ -14,7 +14,7 @@ import {
 const toolDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectDirectory = path.dirname(toolDirectory);
 const releaseVersion =
-  process.env.PAYROLL_RELEASE_VERSION?.trim() || "1.0.0";
+  process.env.PAYROLL_RELEASE_VERSION?.trim() || "1.1.0";
 
 if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(releaseVersion)) {
   throw new Error(`发布版本号无效：${releaseVersion}`);

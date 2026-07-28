@@ -17,7 +17,7 @@ import {
 const toolDirectory = path.dirname(fileURLToPath(import.meta.url));
 const projectDirectory = path.dirname(toolDirectory);
 const releaseVersion =
-  process.env.PAYROLL_RELEASE_VERSION?.trim() || "1.0.0";
+  process.env.PAYROLL_RELEASE_VERSION?.trim() || "1.1.0";
 
 if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(releaseVersion)) {
   throw new Error(`发布版本号无效：${releaseVersion}`);
@@ -65,6 +65,13 @@ const entries = [
   mappedFile(
     path.join(toolDirectory, "check_app_architecture.mjs"),
     "tools/check_app_architecture.mjs",
+  ),
+  mappedFile(
+    path.join(
+      toolDirectory,
+      "officecrypto-browser-crypto-shim.cjs",
+    ),
+    "tools/officecrypto-browser-crypto-shim.cjs",
   ),
   mappedFile(
     path.join(toolDirectory, "release-utils.mjs"),

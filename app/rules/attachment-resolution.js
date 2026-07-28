@@ -315,6 +315,9 @@
     const missingTarget = [...expectedRows].filter(
       (rowNumber) => !matchedRows.has(rowNumber),
     ).length;
+    const matchedExpectedPeople = [...expectedRows].filter(
+      (rowNumber) => matchedRows.has(rowNumber),
+    ).length;
     if (duplicateKeys.size) {
       errors.push(`来源表有 ${duplicateKeys.size} 个重复人员标识`);
     }
@@ -338,7 +341,11 @@
       mappings,
       updates,
       fieldSummaries: [...fieldSummaryMap.values()],
-      matchedPeople: matchedRows.size,
+      matchedPeople:
+        category === "劳务费附件" && !expectedRows.size
+          ? matchedRows.size
+          : matchedExpectedPeople,
+      sourceMatchedPeople: matchedRows.size,
       matchedTargetRows: [...matchedRows],
       expectedPeople:
         category === "劳务费附件" && !expectedRows.size

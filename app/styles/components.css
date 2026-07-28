@@ -458,6 +458,88 @@ tbody tr:hover td {
   background: #fff9ed;
 }
 
+.password-dialog {
+  width: min(460px, calc(100vw - 32px));
+  padding: 0;
+  border: 0;
+  border-radius: 18px;
+  color: var(--ink);
+  background: transparent;
+  box-shadow: 0 28px 80px rgba(14, 35, 27, 0.28);
+}
+
+.password-dialog::backdrop {
+  background: rgba(17, 33, 27, 0.68);
+  backdrop-filter: blur(8px);
+}
+
+.password-dialog-card {
+  display: grid;
+  gap: 18px;
+  padding: 26px;
+  border: 1px solid rgba(213, 220, 214, 0.92);
+  border-radius: 18px;
+  background: #fff;
+}
+
+.password-dialog-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.password-dialog-head > div {
+  min-width: 0;
+}
+
+.password-dialog-head h2 {
+  margin-bottom: 5px;
+  font-size: 22px;
+}
+
+.password-dialog-head p {
+  margin-bottom: 0;
+  overflow-wrap: anywhere;
+}
+
+.password-dialog-head p strong {
+  color: var(--ink);
+}
+
+.password-dialog-icon {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 12px;
+  color: var(--green-dark);
+  background: var(--green-soft);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.password-dialog-error,
+.password-dialog-note {
+  margin: -7px 0 0;
+  font-size: 12px;
+}
+
+.password-dialog-error {
+  color: var(--red);
+  font-weight: 700;
+}
+
+.password-dialog-note {
+  color: var(--muted);
+}
+
+.password-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
 .loading-overlay {
   position: fixed;
   z-index: 100;

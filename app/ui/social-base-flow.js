@@ -24,7 +24,7 @@
           errors.push(`${file.name} 不是 ${requiredYear} 年月度文件`);
           continue;
         }
-        const workbook = await window.XlsxEngine.XlsxWorkbook.load(file);
+        const workbook = await ui.loadWorkbookFile(file);
         const sheetName = await ui.chooseMainSheet(workbook);
         monthlyTables.push({
           file,
@@ -49,6 +49,7 @@
       console.error(error);
     } finally {
       ui.setLoading(false);
+      event.target.value = "";
     }
   }
 
@@ -83,7 +84,7 @@
     }
     ui.setLoading(true, "正在识别社保模板…");
     try {
-      const workbook = await window.XlsxEngine.XlsxWorkbook.load(file);
+      const workbook = await ui.loadWorkbookFile(file);
       const periodVariants = [
         ui.state.targetPeriod,
         ui.state.targetPeriod.replace("-", "."),
@@ -117,6 +118,7 @@
       console.error(error);
     } finally {
       ui.setLoading(false);
+      event.target.value = "";
     }
   }
 

@@ -87,6 +87,7 @@ async function encryptedWorkbookPayload(
   password,
   options = {},
 ) {
+  const sourceBuffer = options.buffer || fs.readFileSync(sourcePath);
   const encryptedBase64 = await page.evaluate(
     async ({ base64, password: testPassword, type }) => {
       const binary = window.atob(base64);
@@ -110,7 +111,7 @@ async function encryptedWorkbookPayload(
       return window.btoa(encryptedBinary);
     },
     {
-      base64: fs.readFileSync(sourcePath).toString("base64"),
+      base64: sourceBuffer.toString("base64"),
       password,
       type: options.type || "",
     },
@@ -158,6 +159,12 @@ async function applyAttachments(page, attachments) {
 
 async function saveExport(page, destination) {
   await page.locator('[data-tab="review"]').click();
+  const confirmations = page.locator(
+    "#monthlyBusinessList [data-monthly-business-id]:not(:disabled)",
+  );
+  for (let index = 0; index < (await confirmations.count()); index += 1) {
+    await confirmations.nth(index).check();
+  }
   await page.locator("#exportAcknowledged").check();
   const downloadPromise = page.waitForEvent("download");
   await page.locator("#exportWorkbookBtn").click();
@@ -194,6 +201,41 @@ async function inspectExternalPackage(filePath) {
   };
 }
 
+function xmlText(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+async function docxTablePayload(name, rows) {
+  const zip = new JSZip();
+  const tableRows = rows
+    .map(
+      (row) =>
+        `<w:tr>${row
+          .map(
+            (value) =>
+              `<w:tc><w:p><w:r><w:t>${xmlText(value)}</w:t></w:r></w:p></w:tc>`,
+          )
+          .join("")}</w:tr>`,
+    )
+    .join("");
+  zip.file(
+    "word/document.xml",
+    `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+      <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:body><w:tbl>${tableRows}</w:tbl></w:body>
+      </w:document>`,
+  );
+  return {
+    name,
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    buffer: await zip.generateAsync({ type: "nodebuffer" }),
+  };
+}
+
 test("开始页保持简洁，只接收上月完整工资表", async ({ page }) => {
   const pageErrors = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
@@ -207,6 +249,174 @@ test("开始页保持简洁，只接收上月完整工资表", async ({ page }) 
   await expect(page.locator("#targetTemplateInput")).toHaveCount(0);
   await expect(page.locator("#startBtn")).toHaveCount(0);
   await expect(page.getByText(/本地处理|不上传|确认后写入/)).toHaveCount(0);
+  const monthlyRules = await page.evaluate(() =>
+    ["2026-01", "2026-02", "2026-03", "2026-04"].map((period) => {
+      const plan = window.PayrollEngine.monthlyBusinessPlan(period);
+      return {
+        period,
+        performancePayout: plan.performancePayout,
+        confidentialReview: plan.confidentialReview,
+        pending: window.PayrollEngine
+          .pendingMonthlyBusiness(plan)
+          .map((item) => item.id),
+      };
+    }),
+  );
+  expect(monthlyRules).toEqual([
+    {
+      period: "2026-01",
+      performancePayout: true,
+      confidentialReview: false,
+      pending: [
+        "hr-changes",
+        "attendance",
+        "sales-commission",
+        "quarterly-performance",
+      ],
+    },
+    {
+      period: "2026-02",
+      performancePayout: false,
+      confidentialReview: false,
+      pending: ["hr-changes", "attendance", "sales-commission"],
+    },
+    {
+      period: "2026-03",
+      performancePayout: false,
+      confidentialReview: true,
+      pending: [
+        "hr-changes",
+        "attendance",
+        "sales-commission",
+        "confidential-allowance",
+      ],
+    },
+    {
+      period: "2026-04",
+      performancePayout: true,
+      confidentialReview: false,
+      pending: [
+        "hr-changes",
+        "attendance",
+        "sales-commission",
+        "quarterly-performance",
+      ],
+    },
+  ]);
+  expect(pageErrors).toEqual([]);
+});
+
+test("历史业务附件按已证明字段映射，只有名单没有金额时停止", async ({
+  page,
+}) => {
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await openRegularWorkspace(page);
+
+  const profileEvidence = await page.evaluate(() => {
+    const target = window.PayrollLocal.ui.state.table;
+    const scenarios = [
+      {
+        name: "2025.12实习生津贴.xlsx",
+        matrix: [
+          ["姓名", "身份证号", "津贴总额"],
+          ["测试甲", "SYNTHETIC-ID-001", 5100],
+        ],
+      },
+      {
+        name: "保密人员统计-25.12.22.xlsx",
+        matrix: [
+          ["姓名", "津贴"],
+          ["测试甲", 300],
+        ],
+      },
+      {
+        name: "xgs369人员名单.docx",
+        matrix: [
+          ["序号", "姓名"],
+          [1, "测试甲"],
+        ],
+      },
+    ];
+    return scenarios.map((scenario) => {
+      const table = window.XlsxEngine.buildTableFromMatrix(
+        scenario.matrix,
+        "业务表",
+      );
+      const profile = window.PayrollEngine.matchBusinessSource(
+        table,
+        scenario.name,
+      );
+      const result = window.PayrollEngine.proposalsFromBusinessSource(
+        table,
+        target,
+        "2025-12",
+        scenario.name,
+        profile,
+      );
+      return {
+        profile: profile?.id || "",
+        fields: result.proposals.map(
+          (proposal) => proposal.field?.name || "",
+        ),
+        errors: result.errors,
+      };
+    });
+  });
+  expect(profileEvidence).toEqual([
+    {
+      profile: "intern-allowance",
+      fields: ["基本工资"],
+      errors: [],
+    },
+    {
+      profile: "confidential-allowance-roster",
+      fields: ["BM津贴"],
+      errors: [],
+    },
+    {
+      profile: "confidential-eligibility",
+      fields: [],
+      errors: [expect.stringContaining("没有提供可写入工资表的补贴金额")],
+    },
+  ]);
+
+  const approval = await docxTablePayload(
+    "保密补贴发放审批表2025.12.docx",
+    [
+      ["序号", "姓名", "岗位密级", "应发数额", "实发数额", "备注"],
+      ["1", "测试甲", "一般", "300", "300", ""],
+    ],
+  );
+  await page.locator('[data-tab="changes"]').click();
+  await page.locator("#sourceFilesInput").setInputFiles(approval);
+  await expect(page.locator("#loadingOverlay")).toBeHidden({
+    timeout: 30_000,
+  });
+  await expect(page.locator("#proposalTable tbody tr")).toHaveCount(1);
+  const docxEvidence = await page.evaluate(() => {
+    const state = window.PayrollLocal.ui.state;
+    const proposal = state.proposals.find(
+      (item) => item.sourceKind === "confidential-allowance-approval",
+    );
+    const source = state.sources.at(-1);
+    return {
+      category: source.category,
+      format: source.format,
+      mappingCount: source.mappingCount,
+      field: proposal?.field?.name || "",
+      value: proposal?.inputValue,
+      status: proposal?.status || "",
+    };
+  });
+  expect(docxEvidence).toEqual({
+    category: "保密补贴审批表",
+    format: "docx-business-source",
+    mappingCount: 1,
+    field: "BM津贴",
+    value: "300",
+    status: "ready",
+  });
   expect(pageErrors).toEqual([]);
 });
 
@@ -305,6 +515,104 @@ test("加密工作簿弹窗重试并支持不同文件使用不同密码", async
   expect(pageErrors).toEqual([]);
 });
 
+test("三类附件仅一份加密且工作表名仍为上月时完整读取", async ({
+  page,
+}) => {
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await openJanuaryWorkspace(page);
+
+  const staleSheetZip = await JSZip.loadAsync(
+    fs.readFileSync(januaryAttachments[1]),
+  );
+  const workbookXmlPath = "xl/workbook.xml";
+  const workbookXml = await staleSheetZip
+    .file(workbookXmlPath)
+    .async("string");
+  if (!workbookXml.includes('name="2026.1"')) {
+    throw new Error("合成社保附件缺少预期工作表");
+  }
+  staleSheetZip.file(
+    workbookXmlPath,
+    workbookXml.replace('name="2026.1"', 'name="2025.12"'),
+  );
+  const staleSheetBuffer = await staleSheetZip.generateAsync({
+    type: "nodebuffer",
+  });
+  const encryptedInsurance = await encryptedWorkbookPayload(
+    page,
+    januaryAttachments[1],
+    "synthetic-three-file-password",
+    { buffer: staleSheetBuffer },
+  );
+  const filePayload = (sourcePath) => ({
+    name: path.basename(sourcePath),
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: fs.readFileSync(sourcePath),
+  });
+
+  await page.locator('[data-tab="attachments"]').click();
+  await page
+    .locator("#attachmentFilesInput")
+    .setInputFiles([
+      filePayload(januaryAttachments[0]),
+      encryptedInsurance,
+      filePayload(januaryAttachments[2]),
+    ]);
+  const dialog = page.locator("#workbookPasswordDialog");
+  await expect(dialog).toBeVisible();
+  await expect(page.locator("#workbookPasswordFile")).toHaveText(
+    encryptedInsurance.name,
+  );
+  await page
+    .locator("#workbookPasswordInput")
+    .fill("synthetic-three-file-password");
+  await page.getByRole("button", { name: "打开工作簿" }).click();
+  await expect(page.locator("#loadingOverlay")).toBeHidden({
+    timeout: 30_000,
+  });
+
+  const evidence = await page.evaluate(() => {
+    const state = window.PayrollLocal.ui.state;
+    return {
+      errors: state.attachments.errors,
+      categories: state.attachments.results.map(
+        (result) => result.category,
+      ),
+      updateCounts: state.attachments.results.map(
+        (result) => result.updates.length,
+      ),
+      insuranceWarnings:
+        state.attachments.results.find(
+          (result) => result.category === "社保 / 公积金附件",
+        )?.warnings || [],
+    };
+  });
+  expect(evidence).toEqual({
+    errors: [],
+    categories: [
+      "个税工资薪金附件",
+      "社保 / 公积金附件",
+      "劳务费附件",
+    ],
+    updateCounts: [14, 12, 1],
+    insuranceWarnings: [
+      expect.stringContaining(
+        "工作表名仍为2025年12月，文件名指向2026年1月",
+      ),
+    ],
+  });
+  await expect(page.locator("#attachmentSummary")).toHaveText(
+    "3/3 类附件已读取，3/3 类通过核对。",
+  );
+  await expect(page.locator("#applyAttachmentsBtn")).toBeEnabled();
+  await expect(page.locator("#attachmentCards")).toContainText(
+    "已按唯一字段结构读取",
+  );
+  expect(pageErrors).toEqual([]);
+});
+
 test("普通月份用目标月附件写入人员字段并生成无外链文件", async ({
   page,
 }) => {
@@ -328,6 +636,16 @@ test("普通月份用目标月附件写入人员字段并生成无外链文件",
       cumulativeWrites: state.cumulativeResult.written,
       required: state.attachments.required.map((item) => item.category),
       firstOtherPay: first.row.get("其他工资"),
+      firstBmAllowance: first.row.get("BM津贴"),
+      resetValues: Object.fromEntries(
+        state.monthlyBusiness.resetFields.map((field) => [
+          field,
+          first.row.get(field),
+        ]),
+      ),
+      pendingBusiness: window.PayrollEngine
+        .pendingMonthlyBusiness(state.monthlyBusiness)
+        .map((item) => item.id),
       firstFinalPay: first.row.get("实发合计"),
       unresolvedFormulas: state.formulaDiagnostics.unresolvedFormulaNodes,
     };
@@ -339,9 +657,73 @@ test("普通月份用目标月附件写入人员字段并生成无外链文件",
       "个税工资薪金附件",
       "社保 / 公积金附件",
     ],
-    firstOtherPay: 0,
+    firstOtherPay: null,
+    firstBmAllowance: 200,
+    resetValues: {
+      "月度绩效（季度发放）": null,
+      销售提成: null,
+      其他工资: null,
+      考勤扣款: null,
+      其他扣款: null,
+      年度绩效: null,
+      代扣借款: null,
+    },
+    pendingBusiness: [
+      "hr-changes",
+      "attendance",
+      "sales-commission",
+      "confidential-allowance",
+    ],
     firstFinalPay: 5600,
     unresolvedFormulas: 0,
+  });
+
+  const unchangedAttachmentEvidence = await page.evaluate(() => {
+    const state = window.PayrollLocal.ui.state;
+    const rules = window.PayrollEngine;
+    const fields = [
+      ["养老个人", "代扣养老保险"],
+      ["医疗个人", "代扣医疗保险"],
+      ["失业个人", "代扣失业保险"],
+      ["公积金个人", "代扣房积金"],
+      ["个人合计", "个人承担社保部分扣款合计"],
+      ["公司合计", "企业承担社保部分扣款合计"],
+    ];
+    const people = rules
+      .buildPeople(state.table)
+      .people.filter((person) => person.idCard);
+    const matrix = [
+      ["姓名", "身份证号", ...fields.map(([source]) => source)],
+      ...people.map((person) => [
+        person.name,
+        person.idCard,
+        ...fields.map(([, target]) => person.row.get(target)),
+      ]),
+    ];
+    const source = window.XlsxEngine.buildTableFromMatrix(
+      matrix,
+      "2025.12",
+    );
+    const result = rules.resolveAttachment(
+      "社保 / 公积金附件",
+      source,
+      state.table,
+      state.targetPeriod,
+      "2025.12同值保险表.xlsx",
+    );
+    return {
+      errors: result.errors,
+      updates: result.updates.length,
+      changed: result.fieldSummaries.reduce(
+        (total, field) => total + field.changed,
+        0,
+      ),
+    };
+  });
+  expect(unchangedAttachmentEvidence).toEqual({
+    errors: [],
+    updates: 12,
+    changed: 0,
   });
 
   await applyAttachments(page, regularAttachments);
@@ -358,6 +740,14 @@ test("普通月份用目标月附件写入人员字段并生成无外链文件",
       externalLinks: state.externalLinks.length,
       externalFormulas: state.formulaDiagnostics.externalFormulaNodes,
       frozenLegacy: state.attachments.detached.frozenLegacyFormulaCount,
+      attachmentWrites: state.attachments.results.map((result) => ({
+        category: result.category,
+        updates: result.updates.length,
+        changed: result.fieldSummaries.reduce(
+          (total, field) => total + field.changed,
+          0,
+        ),
+      })),
       tax: first.row.get("累计子女教育"),
       pension: first.row.get("代扣养老保险"),
       medical: first.row.get("代扣医疗保险"),
@@ -373,6 +763,18 @@ test("普通月份用目标月附件写入人员字段并生成无外链文件",
     externalLinks: 0,
     externalFormulas: 0,
     frozenLegacy: 1,
+    attachmentWrites: [
+      {
+        category: "个税工资薪金附件",
+        updates: 14,
+        changed: expect.any(Number),
+      },
+      {
+        category: "社保 / 公积金附件",
+        updates: 12,
+        changed: expect.any(Number),
+      },
+    ],
     tax: 120,
     pension: 100,
     medical: 20,
@@ -381,6 +783,12 @@ test("普通月份用目标月附件写入人员字段并生成无外链文件",
     personalTotal: 330,
     companyTotal: 1870,
   });
+  await page.locator('[data-tab="review"]').click();
+  await page.locator("#exportAcknowledged").check();
+  await expect(page.locator("#exportWorkbookBtn")).toBeDisabled();
+  await expect(page.locator("#monthlyBusinessBadge")).toContainText(
+    "4 项待",
+  );
   await saveExport(page, regularOutput);
   const exported = await inspectExternalPackage(regularOutput);
   expect(exported).toEqual({
@@ -593,8 +1001,8 @@ test("工资变动同步主表、公式核对表和代发薪，停用同步三�
   await page.locator('[data-tab="changes"]').click();
 
   const payChanges = [
-    "人员编号,姓名,其他工资,实发合计",
-    "TEST-001,测试甲,250,5555",
+    "人员编号,姓名,其他工资,月度绩效（季度发放）,实发合计",
+    "TEST-001,测试甲,250,300,5555",
   ].join("\n");
   await page.locator("#sourceFilesInput").setInputFiles({
     name: "合成人员工资变动.csv",
@@ -604,7 +1012,7 @@ test("工资变动同步主表、公式核对表和代发薪，停用同步三�
   await expect(page.locator("#loadingOverlay")).toBeHidden({
     timeout: 30_000,
   });
-  await expect(page.locator("#proposalTable tbody tr")).toHaveCount(2);
+  await expect(page.locator("#proposalTable tbody tr")).toHaveCount(3);
   await page.locator("#applyProposalsBtn").click();
   await expect(page.locator("#loadingOverlay")).toBeHidden({
     timeout: 30_000,
@@ -623,6 +1031,7 @@ test("工资变动同步主表、公式核对表和代发薪，停用同步三�
     );
     return {
       otherPay: person.row.get("其他工资"),
+      settledPerformance: person.row.get("月度绩效（季度发放）"),
       finalPay: person.row.get("实发合计"),
       finalPayFormula:
         person.row.cells.get(
@@ -634,10 +1043,11 @@ test("工资变动同步主表、公式核对表和代发薪，停用同步三�
   });
   expect(paySync).toEqual({
     otherPay: 250,
+    settledPerformance: 300,
     finalPay: 5555,
     finalPayFormula: "AU3-AX3",
     disbursementAmount: 5555,
-    syncEntries: 2,
+    syncEntries: 3,
   });
 
   await page.locator("#changeText").fill("测试乙 停用");
@@ -694,7 +1104,7 @@ test("工资变动同步主表、公式核对表和代发薪，停用同步三�
     工资核对表: 1,
     代发薪: 1,
   });
-  expect(disableSync.syncEntries).toBe(3);
+  expect(disableSync.syncEntries).toBe(4);
 });
 
 test("工资字段变化缺少实发合计时整批停止，不部分写入", async ({
@@ -728,7 +1138,7 @@ test("工资字段变化缺少实发合计时整批停止，不部分写入", as
       .people.find((item) => item.employeeId === "TEST-001");
     return person.row.get("其他工资");
   });
-  expect(currentValue).toBe(0);
+  expect(currentValue).toBeNull();
 
   await page.locator("#clearProposalsBtn").click();
   await page

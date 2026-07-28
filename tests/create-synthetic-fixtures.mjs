@@ -358,6 +358,20 @@ function mainSheetXml(year, month, indices) {
       实发合计: 760,
     },
   ];
+  for (const person of people) {
+    person.BM津贴 = person.身份证 ? 200 : 0;
+  }
+  if (month === 11) {
+    Object.assign(people[0], {
+      "月度绩效（季度发放）": 900,
+      销售提成: 300,
+      其他工资: 150,
+      考勤扣款: -50,
+      其他扣款: -20,
+      年度绩效: 600,
+      代扣借款: 100,
+    });
+  }
   for (let personIndex = 0; personIndex < people.length; personIndex += 1) {
     const rowNumber = personIndex + 3;
     const person = people[personIndex];

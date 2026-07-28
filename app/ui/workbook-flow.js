@@ -173,12 +173,31 @@
     );
   }
 
+  async function applyMonthlyBusinessRules() {
+    const plan = rules.monthlyBusinessPlan(
+      ui.state.targetPeriod,
+      ui.state.table,
+    );
+    if (plan.errors.length) {
+      throw new Error(plan.errors.join("；"));
+    }
+    if (plan.resetFields.length) {
+      await ui.state.workbook.clearFieldsForPeople(
+        ui.state.mainSheetName,
+        ui.state.table,
+        plan.resetFields,
+      );
+    }
+    ui.state.monthlyBusiness = plan;
+  }
+
   async function finalizeWorkspace() {
     if (ui.state.route.id === "january-rollover") {
       await applyJanuaryRoute();
     } else {
       await applyRegularRoute();
     }
+    await applyMonthlyBusinessRules();
     const markers = await ui.state.workbook.findMonthMarkers(
       ui.state.basePeriod,
     );
@@ -206,7 +225,7 @@
       {
         time: new Date().toLocaleTimeString("zh-CN"),
         label: `${rules.formatPeriod(ui.state.basePeriod)} → ${rules.formatPeriod(ui.state.targetPeriod)}`,
-        detail: `${ui.state.route.label}；更新 ${ui.state.monthMarkers.length} 个月份标题，等待目标月份工资附件核对。`,
+        detail: `${ui.state.route.label}；更新 ${ui.state.monthMarkers.length} 个月份标题，重置 ${ui.state.monthlyBusiness.resetFields.length} 个目标月份专属字段，等待本月资料与工资附件核对。`,
         kind: "month-route",
       },
     ];

@@ -26,6 +26,12 @@
     disabledRows: new Set(),
     personnelSheets: [],
     workbookSync: [],
+    monthlyBusiness: {
+      period: "",
+      resetFields: [],
+      items: [],
+      errors: [],
+    },
     showPrivateData: false,
     baseHash: "",
     attachments: {

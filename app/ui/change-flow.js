@@ -128,9 +128,22 @@
     if (!table) {
       throw new Error(`${file.name} 没有可识别的工作表`);
     }
+    const businessProfile = rules.matchBusinessSource(
+      table,
+      file.name,
+    );
     let result;
     let resolvedCategory = category;
-    if (looksLikeChangeTable(table)) {
+    if (businessProfile) {
+      result = rules.proposalsFromBusinessSource(
+        table,
+        ui.state.table,
+        ui.state.targetPeriod,
+        role,
+        businessProfile,
+      );
+      resolvedCategory = businessProfile.label;
+    } else if (looksLikeChangeTable(table)) {
       result = rules.proposalsFromChangeTable(
         table,
         ui.state.table,
@@ -175,6 +188,54 @@
     }
   }
 
+  async function importDocxSource(file, options = {}) {
+    if (!ui.state.table) {
+      return;
+    }
+    const role = options.role || file.name;
+    const document = await window.XlsxEngine.parseDocxTables(file);
+    const candidates = document.tables
+      .map((item) => {
+        const table = rules.tableFromMatrix(item.matrix, item.name);
+        return {
+          table,
+          profile: rules.matchBusinessSource(table, file.name),
+        };
+      })
+      .filter((item) => item.profile);
+    if (!candidates.length) {
+      throw new Error(
+        `${file.name} 没有找到经历史证明的人员或工资金额表格`,
+      );
+    }
+    if (candidates.length > 1) {
+      throw new Error(`${file.name} 有多个可识别业务表格，请拆分后导入`);
+    }
+    const { table, profile } = candidates[0];
+    const result = rules.proposalsFromBusinessSource(
+      table,
+      ui.state.table,
+      ui.state.targetPeriod,
+      role,
+      profile,
+    );
+    appendProposals(result);
+    ui.state.sources.push({
+      name: file.name,
+      category: profile.label,
+      sheetName: table.sheetName,
+      mappingCount: result.mappings.length,
+      format: "docx-business-source",
+      proposalCount: result.proposals.length,
+      errors: result.errors,
+      automatic: options.automatic,
+    });
+    ui.renderSources();
+    if (!options.automatic) {
+      ui.toast(`${file.name} 已完成本地匹配预览`);
+    }
+  }
+
   async function importSelectedSources(event) {
     const files = [...(event.target.files || [])];
     if (!files.length) {
@@ -185,6 +246,8 @@
       for (const file of files) {
         if (/\.csv$/i.test(file.name)) {
           await importCsvSource(file);
+        } else if (/\.docx$/i.test(file.name)) {
+          await importDocxSource(file);
         } else {
           await importWorkbookSource(file);
         }
@@ -320,6 +383,7 @@
 
   Object.assign(ui, {
     importWorkbookSource,
+    importDocxSource,
     applySelectedProposals,
     bindChangeFlow,
   });

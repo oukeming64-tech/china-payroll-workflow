@@ -62,8 +62,14 @@
     const candidates = [];
     for (const sheet of workbook.sheets) {
       const table = await workbook.getTable(sheet.name);
+      const periodEvidence = rules.attachmentPeriodEvidence(
+        table,
+        ui.state.targetPeriod,
+        fileName,
+      );
       candidates.push({
         table,
+        periodEvidence,
         score: rules.attachmentTableScore(
           category,
           table,
@@ -82,7 +88,7 @@
     ) {
       throw new Error(`${fileName} 有多个同等匹配的工作表`);
     }
-    return candidates[0].table;
+    return candidates[0];
   }
 
   async function inspectAttachment(file, priorResults = []) {
@@ -91,14 +97,14 @@
       throw new Error(`${file.name} 不是本次需要的工资附件`);
     }
     const workbook = await ui.loadWorkbookFile(file);
-    const table = await chooseAttachmentTable(
+    const selected = await chooseAttachmentTable(
       workbook,
       category,
       file.name,
     );
-    return rules.resolveAttachment(
+    const result = rules.resolveAttachment(
       category,
-      table,
+      selected.table,
       ui.state.table,
       ui.state.targetPeriod,
       file.name,
@@ -109,6 +115,12 @@
         ),
       },
     );
+    const warning = rules.attachmentPeriodWarning(
+      selected.periodEvidence,
+      ui.state.targetPeriod,
+    );
+    result.warnings = warning ? [warning] : [];
+    return result;
   }
 
   async function inspectSelectedAttachments(event) {
@@ -169,8 +181,23 @@
         }
       }
       errors.push(
-        ...results.flatMap((result) => result.errors || []),
+        ...results.flatMap((result) =>
+          (result.errors || []).map(
+            (error) => `${result.category}：${error}`,
+          ),
+        ),
       );
+      if (
+        results.some((result) =>
+          (result.errors || []).some((error) =>
+            /工资表有 \d+ 人未在该来源表中出现/.test(error),
+          ),
+        )
+      ) {
+        errors.push(
+          "请先到“人员 / 工资变动”录入停用、新增或身份信息更正，再重新选择附件。",
+        );
+      }
       ui.state.attachments.results = results;
       ui.state.attachments.updates = results.flatMap(
         (result) => result.updates,
@@ -186,12 +213,12 @@
       ui.openTab("attachments");
       if (ui.state.attachments.errors.length) {
         ui.toast(
-          `附件核对发现 ${ui.state.attachments.errors.length} 个问题`,
+          `已读取 ${results.length}/${files.length} 个附件，核对发现 ${ui.state.attachments.errors.length} 个待处理项`,
           "error",
         );
       } else {
         ui.toast(
-          `已核对 ${results.length} 个附件，可确认写入`,
+          `已读取 ${results.length} 个附件，均通过核对`,
         );
       }
     } finally {

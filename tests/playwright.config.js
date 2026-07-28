@@ -8,14 +8,14 @@ module.exports = {
   reporter: "line",
   outputDir: path.resolve(__dirname, "../output/playwright"),
   webServer: {
-    command: "node tests/serve.mjs",
+    command: "node serve.mjs",
     url: "http://127.0.0.1:8765",
     reuseExistingServer: true,
     timeout: 30_000,
   },
   use: {
     baseURL: "http://127.0.0.1:8765",
-    channel: process.env.PLAYWRIGHT_CHANNEL?.trim() || undefined,
+    channel: process.env.PLAYWRIGHT_CHANNEL || "chrome",
     headless: true,
     locale: "zh-CN",
     timezoneId: "Asia/Shanghai",

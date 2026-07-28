@@ -1,6 +1,6 @@
 {
   "name": "china-payroll-workflow",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "description": "本地优先、无云上传的中国月度工资表工作流",
   "scripts": {

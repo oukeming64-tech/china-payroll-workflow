@@ -226,13 +226,13 @@
                 <input
                   id="sourceFilesInput"
                   type="file"
-                  accept=".xls,.xlsx,.xlsm,.csv"
+                  accept=".xls,.xlsx,.xlsm,.csv,.docx"
                   multiple
                   hidden
                 />
                 <span>＋</span>
                 <strong>选择人员或工资变动表</strong>
-                <small>.xls / .xlsx / .xlsm / .csv，自动识别格式</small>
+                <small>.xls / .xlsx / .xlsm / .csv / .docx，自动识别格式</small>
               </label>
               <button id="downloadChangeTemplateBtn" class="link-button">
                 下载变动表模板
@@ -421,6 +421,19 @@
         </section>
 
         <section id="tab-review" class="tab-panel">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>本月资料核对</h2>
+                <p id="monthlyBusinessSummary">等待建立目标月份草案。</p>
+              </div>
+              <span id="monthlyBusinessBadge" class="status-chip warning">
+                待核对
+              </span>
+            </div>
+            <div id="monthlyBusinessList" class="diagnostic-list"></div>
+          </section>
+
           <div class="review-grid">
             <section class="panel">
               <div class="panel-head compact-head">
@@ -522,13 +535,17 @@
     <script src="./excel/personnel.js"></script>
     <script src="./excel/workbook.js"></script>
     <script src="./excel/source-workbook.js"></script>
+    <script src="./excel/docx-tables.js"></script>
     <script src="./xlsx-engine.js"></script>
     <script src="./rules/common.js"></script>
     <script src="./rules/monthly-routes.js"></script>
+    <script src="./rules/monthly-business.js"></script>
     <script src="./rules/january-rollover.js"></script>
     <script src="./rules/natural-language.js"></script>
     <script src="./rules/tabular-changes.js"></script>
     <script src="./rules/external-source.js"></script>
+    <script src="./rules/business-sources.js"></script>
+    <script src="./rules/attachment-periods.js"></script>
     <script src="./rules/attachment-resolution.js"></script>
     <script src="./rules/workbook-personnel.js"></script>
     <script src="./rules/social-base-july.js"></script>

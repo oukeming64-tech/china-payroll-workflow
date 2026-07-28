@@ -1,0 +1,16 @@
+.DS_Store
+node_modules/
+output/
+test-results/
+playwright-report/
+screenshots/
+*.xlsx
+*.xlsm
+*.xls
+*.xlsb
+*.csv
+*.tsv
+*.docx
+*.pdf
+*.zip
+*.log

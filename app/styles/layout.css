@@ -1,0 +1,393 @@
+.topbar {
+  position: sticky;
+  z-index: 20;
+  top: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 72px;
+  padding: 0 max(24px, calc((100vw - 1440px) / 2));
+  border-bottom: 1px solid rgba(203, 212, 205, 0.72);
+  background: rgba(247, 249, 246, 0.88);
+  backdrop-filter: blur(18px);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+}
+
+.brand-mark {
+  display: grid;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border-radius: 11px;
+  color: #fff;
+  background: var(--green);
+  font-family: "Songti SC", serif;
+  font-size: 19px;
+  font-weight: 700;
+}
+
+.brand > span:last-child {
+  display: grid;
+  line-height: 1.2;
+}
+
+.brand small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.app-shell {
+  width: min(1440px, calc(100% - 48px));
+  margin: 0 auto;
+  padding: 32px 0 72px;
+}
+
+.setup-view {
+  display: grid;
+  min-height: calc(100vh - 136px);
+  place-items: center;
+}
+
+.setup-card,
+.panel {
+  border: 1px solid rgba(213, 220, 214, 0.9);
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: var(--shadow-soft);
+}
+
+.setup-card {
+  display: grid;
+  width: min(520px, 100%);
+  gap: 24px;
+  padding: 46px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.setup-card h1 {
+  margin: 0;
+  font-size: clamp(32px, 4vw, 44px);
+}
+
+.cross-year-setup {
+  display: grid;
+  gap: 12px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.cross-year-setup h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.workspace-view {
+  display: grid;
+  gap: 18px;
+}
+
+.workspace-head {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto minmax(260px, 1fr);
+  align-items: center;
+  gap: 24px;
+  padding: 18px 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.85);
+}
+
+.file-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.file-identity div {
+  display: grid;
+  min-width: 0;
+}
+
+.file-identity strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-identity small {
+  margin-top: 3px;
+  color: var(--muted);
+}
+
+.period-flow {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+}
+
+.period-flow > span {
+  display: grid;
+  min-width: 104px;
+  padding: 8px 13px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  text-align: center;
+  background: #fff;
+}
+
+.period-flow small {
+  color: var(--subtle);
+  font-size: 10px;
+}
+
+.period-flow i {
+  color: var(--subtle);
+  font-style: normal;
+}
+
+.period-flow .target-period {
+  color: var(--green-dark);
+  border-color: #b9d3c8;
+  background: var(--green-soft);
+}
+
+.head-actions,
+.panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+}
+
+.tabs {
+  display: flex;
+  overflow-x: auto;
+  gap: 3px;
+  padding: 5px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #eaeee9;
+}
+
+.tab {
+  flex: 1 0 auto;
+  min-height: 44px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 9px;
+  color: #65716c;
+  background: transparent;
+  font-weight: 700;
+}
+
+.tab.active {
+  color: var(--green-dark);
+  background: #fff;
+  box-shadow: 0 3px 9px rgba(31, 53, 44, 0.08);
+}
+
+.tab-panel {
+  display: none;
+}
+
+.tab-panel.active {
+  display: grid;
+  gap: 18px;
+}
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.stat-grid article {
+  display: grid;
+  min-height: 118px;
+  align-content: center;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+
+.stat-grid span,
+.export-metrics span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.stat-grid strong {
+  margin: 4px 0;
+  font-size: 25px;
+}
+
+.stat-grid small {
+  color: var(--subtle);
+}
+
+.panel {
+  padding: 22px;
+  border-radius: var(--radius-md);
+}
+
+.panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.panel-head h2,
+.panel-head p {
+  margin-bottom: 0;
+}
+
+.compact-head {
+  align-items: center;
+}
+
+.two-column {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.input-panel {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+}
+
+.input-panel h2,
+.input-panel h3,
+.input-panel p {
+  margin-bottom: 0;
+}
+
+.social-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+}
+
+#socialWorkflow {
+  display: grid;
+  gap: 18px;
+}
+
+.field-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.review-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(330px, 0.58fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.export-card {
+  position: sticky;
+  top: 98px;
+  display: grid;
+  gap: 15px;
+}
+
+.export-card h2 {
+  margin-bottom: 0;
+}
+
+.export-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.export-metrics div {
+  display: grid;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--canvas);
+}
+
+.export-metrics strong {
+  font-size: 20px;
+}
+
+@media (max-width: 1080px) {
+  .setup-view {
+    min-height: calc(100vh - 136px);
+  }
+
+  .workspace-head {
+    grid-template-columns: 1fr auto;
+  }
+
+  .period-flow {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .social-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .topbar {
+    padding-inline: 16px;
+  }
+
+  .app-shell {
+    width: min(100% - 24px, 1440px);
+    padding-top: 24px;
+  }
+
+  .workspace-head,
+  .two-column,
+  .review-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .head-actions {
+    justify-content: flex-start;
+  }
+
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .panel-head {
+    flex-direction: column;
+  }
+
+  .panel-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .export-card {
+    position: static;
+  }
+
+  .setup-card {
+    padding: 32px 22px;
+  }
+}

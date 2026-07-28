@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="工资表月度生成工具" />
+    <title>工资表工具</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="./styles/base.css" />
+    <link rel="stylesheet" href="./styles/layout.css" />
+    <link rel="stylesheet" href="./styles/components.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="./index.html" aria-label="返回开始页">
+        <span class="brand-mark" aria-hidden="true">薪</span>
+        <span><strong>工资表工具</strong></span>
+      </a>
+    </header>
+
+    <main class="app-shell">
+      <section id="setupView" class="setup-view">
+        <section class="setup-card" aria-labelledby="setupTitle">
+          <span class="setup-icon" aria-hidden="true">薪</span>
+          <h1 id="setupTitle">生成下月工资表</h1>
+          <label class="drop-zone setup-drop-zone" for="baseWorkbookInput">
+            <input
+              id="baseWorkbookInput"
+              type="file"
+              accept=".xlsx,.xlsm"
+              hidden
+            />
+            <span>＋</span>
+            <strong id="baseFileLabel">选择上月完整工资表</strong>
+            <small>.xlsx / .xlsm</small>
+          </label>
+          <section id="crossYearSetup" class="cross-year-setup" hidden>
+            <h2 id="crossYearTitle">请选择上一年度 1—12 月工资表</h2>
+            <label class="drop-zone setup-drop-zone compact" for="crossYearFilesInput">
+              <input
+                id="crossYearFilesInput"
+                type="file"
+                accept=".xlsx,.xlsm"
+                multiple
+                hidden
+              />
+              <span>＋</span>
+              <strong id="crossYearFilesLabel">选择全年工资表</strong>
+              <small id="crossYearHint">需要完整 12 个月</small>
+            </label>
+          </section>
+        </section>
+      </section>
+
+      <section id="workspaceView" class="workspace-view" hidden>
+        <section class="workspace-head">
+          <div class="file-identity">
+            <span class="excel-icon">X</span>
+            <div>
+              <strong id="workingFileName">—</strong>
+              <small id="workingFileMeta">—</small>
+            </div>
+          </div>
+          <div class="period-flow" aria-label="月份生成路径">
+            <span><small>上月</small><strong id="basePeriodText">—</strong></span>
+            <i>→</i>
+            <span class="target-period">
+              <small>下月</small><strong id="targetPeriodText">—</strong>
+            </span>
+          </div>
+          <div class="head-actions">
+            <button id="privacyToggle" class="btn btn-ghost" type="button">
+              显示完整数据
+            </button>
+            <button id="restartBtn" class="btn btn-ghost" type="button">
+              更换工资表
+            </button>
+          </div>
+        </section>
+
+        <nav class="tabs" aria-label="工资表操作">
+          <button class="tab active" data-tab="overview">工资表</button>
+          <button class="tab" data-tab="attachments">
+            工资附件 <span id="attachmentBadge" class="badge">0/0</span>
+          </button>
+          <button class="tab" data-tab="changes">
+            人员 / 工资变动 <span id="proposalBadge" class="badge">0</span>
+          </button>
+          <button id="socialTab" class="tab" data-tab="social" hidden>
+            七月社保
+          </button>
+          <button class="tab" data-tab="review">
+            生成 <span id="historyBadge" class="badge">0</span>
+          </button>
+          <button class="tab" data-tab="diagnostics">公式与来源</button>
+        </nav>
+
+        <section id="tab-overview" class="tab-panel active">
+          <div class="stat-grid">
+            <article>
+              <span>工作表</span>
+              <strong id="mainSheetStat">—</strong>
+              <small id="headerRowStat">—</small>
+            </article>
+            <article>
+              <span>人员</span>
+              <strong id="peopleStat">—</strong>
+              <small>人</small>
+            </article>
+            <article>
+              <span>字段</span>
+              <strong id="fieldStat">—</strong>
+              <small>列</small>
+            </article>
+            <article>
+              <span>公式</span>
+              <strong id="formulaStat">—</strong>
+              <small>个单元格</small>
+            </article>
+            <article class="warning-stat">
+              <span>外部链接</span>
+              <strong id="externalStat">—</strong>
+              <small>条</small>
+            </article>
+          </div>
+
+          <section id="julyBanner" class="rule-banner" hidden>
+            <span class="rule-icon">7</span>
+            <div>
+              <strong>七月社保基数调整</strong>
+              <p>按上年度工资月均计算。</p>
+            </div>
+            <button class="btn btn-secondary" data-open-tab="social">
+              处理
+            </button>
+          </section>
+
+          <section id="attachmentBanner" class="rule-banner">
+            <span class="rule-icon">附</span>
+            <div>
+              <strong>核对目标月份工资附件</strong>
+              <p>写入个税、社保和适用的劳务费数据后生成无外链文件。</p>
+            </div>
+            <button class="btn btn-secondary" data-open-tab="attachments">
+              处理
+            </button>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head compact-head">
+              <h2>工资表</h2>
+              <label class="search-box">
+                <span>⌕</span>
+                <input
+                  id="peopleSearch"
+                  type="search"
+                  placeholder="姓名、编号或部门"
+                />
+              </label>
+            </div>
+            <div class="table-wrap">
+              <table id="peopleTable">
+                <thead></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+        </section>
+
+        <section id="tab-attachments" class="tab-panel">
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>工资附件</h2>
+                <p id="attachmentSummary">等待选择目标月份附件。</p>
+              </div>
+              <button
+                id="applyAttachmentsBtn"
+                class="btn btn-primary"
+                disabled
+              >
+                确认写入工资表
+              </button>
+            </div>
+            <label class="drop-zone" for="attachmentFilesInput">
+              <input
+                id="attachmentFilesInput"
+                type="file"
+                accept=".xls,.xlsx,.xlsm"
+                multiple
+                hidden
+              />
+              <span>＋</span>
+              <strong>选择目标月份工资附件</strong>
+              <small>个税、保险和适用的劳务费文件，可一次多选</small>
+            </label>
+            <div id="attachmentErrors" class="inline-errors" hidden></div>
+          </section>
+          <section class="panel">
+            <div class="panel-head compact-head">
+              <h2>核对结果</h2>
+            </div>
+            <div id="attachmentCards" class="diagnostic-list">
+              <div class="empty-state">尚未选择附件。</div>
+            </div>
+          </section>
+        </section>
+
+        <section id="tab-changes" class="tab-panel">
+          <div class="two-column">
+            <article class="panel input-panel">
+              <h2>文字变动</h2>
+              <textarea
+                id="changeText"
+                rows="8"
+                placeholder="每行一项，例如：&#10;某员工 其他工资 增加 500&#10;某员工 部门 调整为 市场部"
+              ></textarea>
+              <button id="parseTextBtn" class="btn btn-primary">
+                识别文字
+              </button>
+            </article>
+
+            <article class="panel input-panel">
+              <h2>变动表</h2>
+              <label class="drop-zone" for="sourceFilesInput">
+                <input
+                  id="sourceFilesInput"
+                  type="file"
+                  accept=".xls,.xlsx,.xlsm,.csv"
+                  multiple
+                  hidden
+                />
+                <span>＋</span>
+                <strong>选择人员或工资变动表</strong>
+                <small>.xls / .xlsx / .xlsm / .csv，自动识别格式</small>
+              </label>
+              <button id="downloadChangeTemplateBtn" class="link-button">
+                下载变动表模板
+              </button>
+            </article>
+          </div>
+
+          <section id="sourceSection" class="panel" hidden>
+            <div class="panel-head compact-head">
+              <h2>已导入文件</h2>
+              <span id="sourceCountText" class="soft-pill">0 个文件</span>
+            </div>
+            <div id="sourceCards" class="source-cards"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>识别结果</h2>
+                <p id="proposalSummary">暂无变动。</p>
+              </div>
+              <div class="panel-actions">
+                <button id="clearProposalsBtn" class="btn btn-ghost">
+                  清空
+                </button>
+                <button id="applyProposalsBtn" class="btn btn-primary" disabled>
+                  应用变动
+                </button>
+              </div>
+            </div>
+            <div class="table-wrap proposal-wrap">
+              <table id="proposalTable">
+                <thead>
+                  <tr>
+                    <th>选</th>
+                    <th>状态</th>
+                    <th>人员</th>
+                    <th>字段</th>
+                    <th>操作</th>
+                    <th>原值</th>
+                    <th>新值</th>
+                    <th>来源</th>
+                    <th>问题</th>
+                  </tr>
+                </thead>
+                <tbody></tbody>
+              </table>
+              <div id="proposalEmpty" class="empty-state">暂无识别结果。</div>
+            </div>
+          </section>
+        </section>
+
+        <section id="tab-social" class="tab-panel">
+          <div id="socialInactive" hidden></div>
+          <div id="socialWorkflow" hidden>
+            <section class="panel social-rule-head">
+              <div>
+                <h2>七月社保基数</h2>
+                <p id="socialYearHint">—</p>
+              </div>
+              <span class="status-chip warning">规则参数待确认</span>
+            </section>
+
+            <div class="social-grid">
+              <article class="panel input-panel">
+                <h3>上年度工资表</h3>
+                <label class="drop-zone compact" for="annualPayrollFilesInput">
+                  <input
+                    id="annualPayrollFilesInput"
+                    type="file"
+                    accept=".xlsx,.xlsm"
+                    multiple
+                    hidden
+                  />
+                  <span>＋</span>
+                  <strong>选择 12 个月工资表</strong>
+                  <small id="annualFilesHint">尚未选择</small>
+                </label>
+                <label class="field">
+                  <span>工资总额字段</span>
+                  <select id="annualWageField">
+                    <option value="">请选择</option>
+                  </select>
+                </label>
+              </article>
+
+              <article class="panel input-panel">
+                <h3>计算规则</h3>
+                <label class="field">
+                  <span>不足 12 个月</span>
+                  <select id="socialDivisorMode">
+                    <option value="12">除以 12</option>
+                    <option value="actual">按实际月份数</option>
+                  </select>
+                </label>
+                <div class="field-pair">
+                  <label class="field">
+                    <span>下限</span>
+                    <input id="socialLowerLimit" type="number" min="0" step="0.01" />
+                  </label>
+                  <label class="field">
+                    <span>上限</span>
+                    <input id="socialUpperLimit" type="number" min="0" step="0.01" />
+                  </label>
+                </div>
+                <label class="field">
+                  <span>取整</span>
+                  <select id="socialRounding">
+                    <option value="none">不取整</option>
+                    <option value="round">四舍五入到元</option>
+                    <option value="floor">向下取整到元</option>
+                    <option value="ceil">向上取整到元</option>
+                  </select>
+                </label>
+                <label class="checkbox-row">
+                  <input id="socialExceptionConfirmed" type="checkbox" />
+                  <span>已确认以上规则</span>
+                </label>
+              </article>
+
+              <article class="panel input-panel">
+                <h3>社保表</h3>
+                <label class="file-picker" for="socialTargetInput">
+                  <input
+                    id="socialTargetInput"
+                    type="file"
+                    accept=".xlsx,.xlsm"
+                    hidden
+                  />
+                  <span class="picker-icon muted">表</span>
+                  <span>
+                    <strong id="socialTargetLabel">选择社保表</strong>
+                  </span>
+                  <b>可选</b>
+                </label>
+                <label class="field">
+                  <span>社保基数字段</span>
+                  <select id="socialTargetField">
+                    <option value="">请先选择社保表</option>
+                  </select>
+                </label>
+                <button id="calculateSocialBtn" class="btn btn-primary">
+                  计算
+                </button>
+              </article>
+            </div>
+
+            <section class="panel">
+              <div class="panel-head">
+                <div>
+                  <h2>计算结果</h2>
+                  <p id="socialSummary">等待计算。</p>
+                </div>
+                <div class="panel-actions">
+                  <button id="downloadSocialCsvBtn" class="btn btn-ghost" disabled>
+                    下载 CSV
+                  </button>
+                  <button
+                    id="exportSocialWorkbookBtn"
+                    class="btn btn-secondary"
+                    disabled
+                  >
+                    生成社保表
+                  </button>
+                </div>
+              </div>
+              <div class="table-wrap">
+                <table id="socialTable">
+                  <thead>
+                    <tr>
+                      <th>人员</th>
+                      <th>月份</th>
+                      <th>工资总额</th>
+                      <th>分母</th>
+                      <th>候选基数</th>
+                      <th>调整后</th>
+                      <th>状态</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+                <div id="socialEmpty" class="empty-state">暂无结果。</div>
+              </div>
+            </section>
+          </div>
+        </section>
+
+        <section id="tab-review" class="tab-panel">
+          <div class="review-grid">
+            <section class="panel">
+              <div class="panel-head compact-head">
+                <h2>已应用变动</h2>
+                <button id="resetChangesBtn" class="btn btn-ghost">
+                  重置
+                </button>
+              </div>
+              <div id="historyList" class="history-list">
+                <div class="empty-state">暂无变动。</div>
+              </div>
+            </section>
+
+            <aside class="panel export-card">
+              <h2 id="exportTitle">生成下月工资表</h2>
+              <div class="export-metrics">
+                <div>
+                  <span>月份标题</span>
+                  <strong id="monthMarkerCount">0</strong>
+                </div>
+                <div>
+                  <span>变动</span>
+                  <strong id="exportChangeCount">0</strong>
+                </div>
+                <div>
+                  <span>外链</span>
+                  <strong id="exportLinkCount">0</strong>
+                </div>
+              </div>
+              <label class="field">
+                <span>文件名</span>
+                <input id="outputFileName" />
+              </label>
+              <div class="link-policy">
+                <strong>外部链接：不写入导出文件</strong>
+              </div>
+              <label class="checkbox-row">
+                <input id="exportAcknowledged" type="checkbox" />
+                <span>已核对变动和错误</span>
+              </label>
+              <button id="exportWorkbookBtn" class="btn btn-primary btn-large" disabled>
+                生成工资表
+              </button>
+            </aside>
+          </div>
+        </section>
+
+        <section id="tab-diagnostics" class="tab-panel">
+          <section class="panel">
+            <div class="panel-head compact-head">
+              <h2>来源推进</h2>
+            </div>
+            <div id="sourceRouting" class="diagnostic-list">
+              <div class="empty-state">尚未建立月度来源计划。</div>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>公式</h2>
+                <p id="formulaSummary">尚未读取工资表。</p>
+              </div>
+            </div>
+            <div id="formulaFieldList" class="formula-list"></div>
+          </section>
+
+          <section class="panel">
+            <div class="panel-head compact-head">
+              <h2>外部链接</h2>
+            </div>
+            <div id="externalDiagnostics" class="diagnostic-list">
+              <div class="empty-state">暂无。</div>
+            </div>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <div id="loadingOverlay" class="loading-overlay" hidden>
+      <div class="spinner"></div>
+      <strong id="loadingText">正在读取…</strong>
+    </div>
+    <div id="toastRegion" class="toast-region" aria-live="polite"></div>
+
+    <script src="./vendor/jszip.min.js"></script>
+    <script src="./vendor/xlsx.full.min.js"></script>
+    <script src="./core/namespace.js"></script>
+    <script src="./excel/xml.js"></script>
+    <script src="./excel/table.js"></script>
+    <script src="./excel/mutations.js"></script>
+    <script src="./excel/periods.js"></script>
+    <script src="./excel/external-links.js"></script>
+    <script src="./excel/external-detach.js"></script>
+    <script src="./excel/formulas.js"></script>
+    <script src="./excel/schema.js"></script>
+    <script src="./excel/cumulative.js"></script>
+    <script src="./excel/personnel.js"></script>
+    <script src="./excel/workbook.js"></script>
+    <script src="./excel/source-workbook.js"></script>
+    <script src="./xlsx-engine.js"></script>
+    <script src="./rules/common.js"></script>
+    <script src="./rules/monthly-routes.js"></script>
+    <script src="./rules/january-rollover.js"></script>
+    <script src="./rules/natural-language.js"></script>
+    <script src="./rules/tabular-changes.js"></script>
+    <script src="./rules/external-source.js"></script>
+    <script src="./rules/attachment-resolution.js"></script>
+    <script src="./rules/workbook-personnel.js"></script>
+    <script src="./rules/social-base-july.js"></script>
+    <script src="./payroll-engine.js"></script>
+    <script src="./ui/state.js"></script>
+    <script src="./ui/render.js"></script>
+    <script src="./ui/workbook-flow.js"></script>
+    <script src="./ui/attachment-flow.js"></script>
+    <script src="./ui/personnel-sync-flow.js"></script>
+    <script src="./ui/change-flow.js"></script>
+    <script src="./ui/social-base-flow.js"></script>
+    <script src="./ui/export-flow.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

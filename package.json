@@ -1,0 +1,17 @@
+{
+  "name": "china-payroll-workflow",
+  "version": "1.0.0",
+  "private": true,
+  "description": "本地优先、无云上传的中国月度工资表工作流",
+  "scripts": {
+    "check:architecture": "node tools/check_app_architecture.mjs",
+    "test": "playwright test --config=tests/playwright.config.js",
+    "build": "node tools/build_release.mjs",
+    "package:maintenance": "node tools/build_maintenance_release.mjs",
+    "verify": "npm run check:architecture && npm test && npm run build && npm run package:maintenance"
+  },
+  "devDependencies": {
+    "jszip": "3.10.1",
+    "playwright": "1.61.1"
+  }
+}

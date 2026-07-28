@@ -6,7 +6,8 @@
     2026: Object.freeze({
       id: "2026-tax-deduction-v1",
       evidencePeriod: "2026-01",
-      evidenceRef: "verified-structure-profile-2026-01",
+      evidenceWorkbookSha256:
+        "6e5c0ed61515b4add34610541ff58bd4002340689df5977cc0d35915c47149a7",
       sourceFieldCount: 59,
       targetFieldCount: 63,
       insertAfterField: "累计应计工资",

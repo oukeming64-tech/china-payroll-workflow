@@ -5,9 +5,13 @@
   const rules = window.PayrollEngine;
 
   function updateExportState() {
+    const pendingBusiness = rules.pendingMonthlyBusiness(
+      ui.state.monthlyBusiness,
+    );
     ui.byId("exportWorkbookBtn").disabled =
       !ui.state.workbook ||
       !ui.state.attachments.applied ||
+      Boolean(pendingBusiness.length) ||
       !ui.byId("exportAcknowledged").checked;
   }
 
@@ -27,6 +31,18 @@
     if (unresolved) {
       ui.toast(
         `仍有 ${unresolved} 项匹配错误，已停止生成`,
+        "error",
+      );
+      return;
+    }
+    const pendingBusiness = rules.pendingMonthlyBusiness(
+      ui.state.monthlyBusiness,
+    );
+    if (pendingBusiness.length) {
+      ui.toast(
+        `请先完成本月资料核对：${pendingBusiness
+          .map((item) => item.label)
+          .join("、")}`,
         "error",
       );
       return;

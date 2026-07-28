@@ -215,7 +215,9 @@
     ui.byId("attachmentBanner").hidden = audit.applied;
     ui.byId("attachmentSummary").textContent = audit.applied
       ? "目标月份附件已写入，当前草案无外链。"
-      : `${ready}/${required.length} 类附件已通过核对。`;
+      : audit.results.length
+        ? `${audit.results.length}/${required.length} 类附件已读取，${ready}/${required.length} 类通过核对。`
+        : `${ready}/${required.length} 类附件已通过核对。`;
     ui.byId("attachmentCards").innerHTML = required
       .map((item) => {
         const result = byCategory.get(item.category);
@@ -223,7 +225,7 @@
           ? "已写入"
           : result
             ? result.errors.length
-              ? "有问题"
+              ? "已读取，待处理"
               : "待确认"
             : "待选择";
         const fields = result?.fieldSummaries
@@ -232,12 +234,16 @@
               `<span>${ui.escapeHtml(field.sourceField)} → ${ui.escapeHtml(field.targetField)} · ${field.matched} 人</span>`,
           )
           .join("") || "<span>尚未核对字段</span>";
+        const warnings = result?.warnings?.length
+          ? `<p class="cell-warning">${ui.escapeHtml(result.warnings.join("；"))}</p>`
+          : "";
         return `<article class="diagnostic-card">
           <div class="diagnostic-card-head">
             <strong>${ui.escapeHtml(item.category)}</strong>
             <span class="status-chip ${status === "已写入" || status === "待确认" ? "" : "warning"}">${status}</span>
           </div>
           <p>${ui.escapeHtml(result ? `${result.sourceName} · ${result.sourceSheet} · 匹配 ${result.matchedPeople}/${result.expectedPeople} 人` : "请选择目标月份对应文件")}</p>
+          ${warnings}
           <div class="diagnostic-fields">${fields}</div>
         </article>`;
       })
@@ -327,6 +333,65 @@
       .join("");
   }
 
+  function renderMonthlyBusiness() {
+    const plan = ui.state.monthlyBusiness;
+    const items = plan?.items || [];
+    const pending = rules.pendingMonthlyBusiness(plan);
+    const completed = items.length - pending.length;
+    ui.byId("monthlyBusinessSummary").textContent = items.length
+      ? `${completed}/${items.length} 项已完成；草案已重置 ${plan.resetFields.length} 个仅属于上月的字段。`
+      : "等待建立目标月份草案。";
+    ui.byId("monthlyBusinessBadge").textContent = pending.length
+      ? `${pending.length} 项待核对`
+      : "已完成";
+    ui.byId("monthlyBusinessBadge").classList.toggle(
+      "warning",
+      Boolean(pending.length),
+    );
+    ui.byId("monthlyBusinessList").innerHTML = items
+      .map(
+        (item) => `<article class="diagnostic-card">
+          <div class="diagnostic-card-head">
+            <label class="checkbox-row">
+              <input
+                type="checkbox"
+                data-monthly-business-id="${ui.escapeHtml(item.id)}"
+                ${item.confirmed ? "checked" : ""}
+                ${item.automatic ? "disabled" : ""}
+              />
+              <span>
+                <strong>${ui.escapeHtml(item.label)}</strong>
+                <small>来源：${ui.escapeHtml(item.source)}</small>
+              </span>
+            </label>
+            <span class="status-chip ${item.confirmed ? "" : "warning"}">
+              ${item.automatic ? "规则已处理" : item.confirmed ? "已核对" : "待核对"}
+            </span>
+          </div>
+          <p>${ui.escapeHtml(item.detail)}</p>
+          <div class="diagnostic-fields">
+            ${item.fields.map((field) => `<span>${ui.escapeHtml(field)}</span>`).join("")}
+          </div>
+        </article>`,
+      )
+      .join("");
+    ui.byId("monthlyBusinessList")
+      .querySelectorAll("[data-monthly-business-id]")
+      .forEach((checkbox) => {
+        checkbox.addEventListener("change", () => {
+          const item = items.find(
+            (candidate) =>
+              candidate.id === checkbox.dataset.monthlyBusinessId,
+          );
+          if (item && !item.automatic) {
+            item.confirmed = checkbox.checked;
+            renderMonthlyBusiness();
+            ui.updateExportState?.();
+          }
+        });
+      });
+  }
+
   function renderHistory() {
     ui.byId("historyBadge").textContent = String(ui.state.history.length);
     ui.byId("historyList").innerHTML = ui.state.history.length
@@ -378,6 +443,7 @@
     renderAttachments();
     renderFormulaDiagnostics();
     renderSourceRouting();
+    renderMonthlyBusiness();
     renderDiagnostics();
     renderHistory();
     renderSocialCandidates();
@@ -393,6 +459,7 @@
     renderAttachments,
     renderFormulaDiagnostics,
     renderSourceRouting,
+    renderMonthlyBusiness,
     renderDiagnostics,
     renderHistory,
     renderSocialCandidates,

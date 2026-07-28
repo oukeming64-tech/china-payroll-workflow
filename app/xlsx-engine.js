@@ -10,6 +10,7 @@
     XlsxWorkbook: excel.XlsxWorkbook,
     SourceWorkbook: excel.SourceWorkbook,
     buildTableFromMatrix: excel.buildTableFromMatrix,
+    parseDocxTables: excel.parseDocxTables,
     normalizeText: excel.normalizeText,
     parseCellReference: excel.parseCellReference,
     columnLettersToNumber: excel.columnLettersToNumber,

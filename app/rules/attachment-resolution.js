@@ -42,7 +42,7 @@
         "个税工资薪金附件",
         "社保 / 公积金附件",
       ]),
-      basis: "已验证的一月结构证据证明姓名与扣减税额列的精确查找关系",
+      basis: "2026 年一月黄金工作簿精确 VLOOKUP 已证明姓名与扣减税额列",
     }),
   });
 
@@ -93,17 +93,11 @@
     const identityHeaders = profile.sourceIdentity.filter((name) =>
       headerForSource(table, name),
     ).length;
-    const sheetPeriod = api.detectPeriod(table.sheetName);
-    const filePeriod = api.detectPeriod(fileName);
-    const periodScore = sheetPeriod
-      ? sheetPeriod === targetPeriod
-        ? 300
-        : -300
-      : filePeriod === targetPeriod
-        ? 30
-        : filePeriod
-          ? -30
-          : 0;
+    const periodScore = api.attachmentPeriodEvidence(
+      table,
+      targetPeriod,
+      fileName,
+    ).score;
     return (
       periodScore +
       mappedHeaders * 20 +

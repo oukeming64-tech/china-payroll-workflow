@@ -122,7 +122,7 @@
     }
     const role = options.role || file.name;
     const category = rules.classifySource(file.name);
-    const workbook = await window.XlsxEngine.SourceWorkbook.load(file);
+    const workbook = await ui.loadWorkbookFile(file);
     const diagnostic = matchingDiagnostic(file.name, category);
     const table = await chooseSourceTable(workbook, diagnostic);
     if (!table) {

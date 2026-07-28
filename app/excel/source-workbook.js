@@ -2,6 +2,80 @@
   "use strict";
 
   const api = window.PayrollLocal.excel;
+  const PASSWORD_REQUIRED = "WORKBOOK_PASSWORD_REQUIRED";
+  const PASSWORD_INCORRECT = "WORKBOOK_PASSWORD_INCORRECT";
+
+  function workbookPasswordError(code, fileName) {
+    const error = new Error(
+      code === PASSWORD_INCORRECT
+        ? `${fileName} 密码不正确`
+        : `${fileName} 已加密，需要输入打开密码`,
+    );
+    error.code = code;
+    return error;
+  }
+
+  function hasZipSignature(bytes) {
+    return bytes.length >= 4 &&
+      bytes[0] === 0x50 &&
+      bytes[1] === 0x4b &&
+      [0x03, 0x05, 0x07].includes(bytes[2]) &&
+      [0x04, 0x06, 0x08].includes(bytes[3]);
+  }
+
+  async function decryptWorkbook(bytes, fileName, password) {
+    if (
+      !window.OfficeCrypto?.isEncrypted ||
+      !window.OfficeCrypto?.decrypt
+    ) {
+      throw new Error("本地工作簿解密组件未加载，请重新打开页面");
+    }
+    let encrypted;
+    try {
+      encrypted = window.OfficeCrypto.isEncrypted(bytes);
+    } catch (error) {
+      throw new Error(`${fileName} 的加密结构无法识别：${error.message}`);
+    }
+    if (!encrypted) {
+      return null;
+    }
+    if (!password) {
+      throw workbookPasswordError(PASSWORD_REQUIRED, fileName);
+    }
+    try {
+      const decrypted = await window.OfficeCrypto.decrypt(bytes, {
+        password,
+      });
+      const view = decrypted instanceof Uint8Array
+        ? decrypted
+        : new Uint8Array(decrypted);
+      return view.slice();
+    } catch (error) {
+      if (/password is incorrect/i.test(error.message || "")) {
+        throw workbookPasswordError(PASSWORD_INCORRECT, fileName);
+      }
+      throw new Error(`${fileName} 解密失败：${error.message}`);
+    }
+  }
+
+  function readLegacyWorkbook(bytes, fileName) {
+    let workbook;
+    try {
+      workbook = window.XLSX.read(bytes, {
+        type: "array",
+        cellFormula: true,
+        cellDates: false,
+        cellNF: true,
+        dense: false,
+      });
+    } catch (error) {
+      throw new Error(`旧版 Excel 无法读取：${error.message}`);
+    }
+    if (!workbook.SheetNames?.length) {
+      throw new Error("旧版 Excel 没有可读取的工作表");
+    }
+    return new LegacySourceWorkbook(fileName, workbook);
+  }
 
   function legacyMatrix(worksheet) {
     return window.XLSX.utils.sheet_to_json(worksheet, {
@@ -102,7 +176,7 @@
   }
 
   class SourceWorkbook {
-    static async load(file) {
+    static async load(file, options = {}) {
       if (!file) {
         throw new Error("没有选择来源文件");
       }
@@ -125,32 +199,22 @@
       if (bytes.byteLength > api.MAX_WORKBOOK_BYTES) {
         throw new Error("来源工作簿超过 100 MB，已停止读取");
       }
-      let workbook;
-      try {
-        workbook = window.XLSX.read(bytes, {
-          type: "array",
-          cellFormula: true,
-          cellDates: false,
-          cellNF: true,
-          dense: false,
-        });
-      } catch (error) {
-        if (isCompoundFile && !legacyExtension) {
-          throw new Error(
-            `${file.name} 已加密；请先在 Excel 输入密码并另存为无密码 .xlsx 后再选择`,
-          );
-        }
-        throw new Error(`旧版 Excel 无法读取：${error.message}`);
+      const decrypted = await decryptWorkbook(
+        new Uint8Array(bytes),
+        file.name,
+        options.password,
+      );
+      if (decrypted && hasZipSignature(decrypted)) {
+        return api.XlsxWorkbook.load(decrypted, file.name);
       }
-      if (!workbook.SheetNames?.length) {
-        throw new Error("旧版 Excel 没有可读取的工作表");
-      }
-      return new LegacySourceWorkbook(file.name, workbook);
+      return readLegacyWorkbook(decrypted || bytes, file.name);
     }
   }
 
   Object.assign(api, {
     LegacySourceWorkbook,
+    PASSWORD_INCORRECT,
+    PASSWORD_REQUIRED,
     SourceWorkbook,
   });
 })();

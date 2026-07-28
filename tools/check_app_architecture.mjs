@@ -31,6 +31,7 @@ const FACADES = [
 const EXPECTED_SCRIPT_ORDER = [
   "./vendor/jszip.min.js",
   "./vendor/xlsx.full.min.js",
+  "./vendor/officecrypto-tool.min.js",
   "./core/namespace.js",
   "./excel/xml.js",
   "./excel/table.js",
@@ -56,6 +57,7 @@ const EXPECTED_SCRIPT_ORDER = [
   "./rules/social-base-july.js",
   "./payroll-engine.js",
   "./ui/state.js",
+  "./ui/password-flow.js",
   "./ui/render.js",
   "./ui/workbook-flow.js",
   "./ui/attachment-flow.js",

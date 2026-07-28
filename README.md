@@ -16,8 +16,8 @@
 
 | 压缩包 | 给谁使用 | 作用 |
 |---|---|---|
-| `china-payroll-workflow-universal-v1.0.0.zip`（通用版） | 领导、财务人员 | 解压后双击 `打开工资表工具.html`，直接生成待复核工资表 |
-| `china-payroll-workflow-maintenance-v1.0.0.zip`（维护版） | 领导电脑上的 Codex 或开发人员 | 包含源码、合成测试、规则说明和重新打包工具，用于维护或增加表单适配 |
+| `china-payroll-workflow-universal-v1.1.0.zip`（通用版） | 领导、财务人员 | 解压后双击 `打开工资表工具.html`，直接生成待复核工资表 |
+| `china-payroll-workflow-maintenance-v1.1.0.zip`（维护版） | 领导电脑上的 Codex 或开发人员 | 包含源码、合成测试、规则说明和重新打包工具，用于维护或增加表单适配 |
 
 两个包都不包含真实工资表、员工姓名、身份证号、银行卡号或工资数值。
 
@@ -60,8 +60,9 @@ cd china-payroll-workflow
 3. 选择上月已经确认的完整工资表；
 4. 输入人员、工资、考勤、绩效或提成等目标月变化；
 5. 选择目标月份的个税、社保、公积金及其他必要附件；
-6. 逐项确认人员、字段和错误预览；
-7. 生成后用桌面版 Excel 完整重算并复核。
+6. 如果工作簿有打开密码，按弹窗输入；每个文件可使用不同密码；
+7. 逐项确认人员、字段和错误预览；
+8. 生成后用桌面版 Excel 完整重算并复核。
 
 支持 Windows、macOS 和常见桌面 Linux。建议使用最新版 Edge、Chrome 或 Safari。
 手机微信和微信内置预览不属于支持的运行环境。
@@ -113,6 +114,7 @@ tools/      → 架构检查和跨平台发布构建
 
 - 所有工资文件只在当前电脑浏览器中读取；
 - 程序没有登录、遥测、云存储或上传接口；
+- 工作簿密码只用于当次本地读取，不写入程序状态、浏览器存储、日志或导出文件；
 - 原文件只读，工具只下载新文件；
 - 发布和测试禁止包含真实人员信息、工资数值、真实回放和内部工作簿指纹；
 - 发现人员、字段、月份或公式缓存不安全时必须停止。
@@ -124,6 +126,6 @@ tools/      → 架构检查和跨平台发布构建
 
 ## 许可证
 
-项目代码采用 [Apache License 2.0](LICENSE)。SheetJS 与 JSZip 按各自许可证分发，
-详见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。版本变化见
+项目代码采用 [Apache License 2.0](LICENSE)。SheetJS、JSZip 与 officecrypto-tool
+按各自许可证分发，详见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。版本变化见
 [`CHANGELOG.md`](CHANGELOG.md)。

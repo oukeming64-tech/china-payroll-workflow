@@ -90,7 +90,7 @@
     if (!rules.profileForAttachment(category)) {
       throw new Error(`${file.name} 不是本次需要的工资附件`);
     }
-    const workbook = await window.XlsxEngine.SourceWorkbook.load(file);
+    const workbook = await ui.loadWorkbookFile(file);
     const table = await chooseAttachmentTable(
       workbook,
       category,

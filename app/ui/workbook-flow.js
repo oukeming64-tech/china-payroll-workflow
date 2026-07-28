@@ -81,7 +81,7 @@
 
   async function readBaseWorkbook(file) {
     ui.state.workingSourceFile = file;
-    ui.state.workbook = await window.XlsxEngine.XlsxWorkbook.load(file);
+    ui.state.workbook = await ui.loadWorkbookFile(file);
     ui.state.mainSheetName = await chooseMainSheet(ui.state.workbook);
     const candidates = await ui.state.workbook.findPeriodCandidates(
       ui.state.mainSheetName,
@@ -112,7 +112,7 @@
     const errors = [];
     for (const file of files) {
       try {
-        const workbook = await window.XlsxEngine.XlsxWorkbook.load(file);
+        const workbook = await ui.loadWorkbookFile(file);
         const sheetName = await chooseMainSheet(workbook);
         const candidates = await workbook.findPeriodCandidates(sheetName);
         const resolved = resolveCurrentPeriod(file.name, candidates);
@@ -269,6 +269,10 @@
     } catch (error) {
       ui.toast(error.message || "工资表读取失败", "error");
       console.error(error);
+      ui.state.baseFile = null;
+      ui.state.workingSourceFile = null;
+      ui.byId("baseFileLabel").textContent = "选择上月完整工资表";
+      event.target.value = "";
     } finally {
       ui.setLoading(false);
     }

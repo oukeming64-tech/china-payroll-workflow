@@ -81,6 +81,48 @@ async function selectBaseWorkbook(page, workbook = regularWorkbook) {
   });
 }
 
+async function encryptedWorkbookPayload(
+  page,
+  sourcePath,
+  password,
+  options = {},
+) {
+  const encryptedBase64 = await page.evaluate(
+    async ({ base64, password: testPassword, type }) => {
+      const binary = window.atob(base64);
+      const plain = Uint8Array.from(
+        binary,
+        (character) => character.charCodeAt(0),
+      );
+      const encryptionOptions = { password: testPassword };
+      if (type) {
+        encryptionOptions.type = type;
+      }
+      const encrypted = await Promise.resolve(
+        window.OfficeCrypto.encrypt(plain, encryptionOptions),
+      );
+      let encryptedBinary = "";
+      for (let offset = 0; offset < encrypted.length; offset += 0x8000) {
+        encryptedBinary += String.fromCharCode(
+          ...encrypted.subarray(offset, offset + 0x8000),
+        );
+      }
+      return window.btoa(encryptedBinary);
+    },
+    {
+      base64: fs.readFileSync(sourcePath).toString("base64"),
+      password,
+      type: options.type || "",
+    },
+  );
+  return {
+    name: options.name || path.basename(sourcePath),
+    mimeType:
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    buffer: Buffer.from(encryptedBase64, "base64"),
+  };
+}
+
 async function openRegularWorkspace(page) {
   await selectBaseWorkbook(page);
   await expect(page.locator("#workspaceView")).toBeVisible();
@@ -165,6 +207,101 @@ test("开始页保持简洁，只接收上月完整工资表", async ({ page }) 
   await expect(page.locator("#targetTemplateInput")).toHaveCount(0);
   await expect(page.locator("#startBtn")).toHaveCount(0);
   await expect(page.getByText(/本地处理|不上传|确认后写入/)).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+});
+
+test("加密工作簿弹窗重试并支持不同文件使用不同密码", async ({
+  page,
+}) => {
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await page.goto("/");
+
+  const encryptedBase = await encryptedWorkbookPayload(
+    page,
+    regularWorkbook,
+    "synthetic-base-password",
+    { type: "standard" },
+  );
+  await page.locator("#baseWorkbookInput").setInputFiles(encryptedBase);
+  const dialog = page.locator("#workbookPasswordDialog");
+  await expect(dialog).toBeVisible();
+  await expect(page.locator("#workbookPasswordFile")).toHaveText(
+    encryptedBase.name,
+  );
+  await page.getByRole("button", { name: "取消" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator("#loadingOverlay")).toBeHidden();
+  await expect(page.locator("#baseFileLabel")).toHaveText(
+    "选择上月完整工资表",
+  );
+
+  await page.locator("#baseWorkbookInput").setInputFiles(encryptedBase);
+  await expect(dialog).toBeVisible();
+  await page.locator("#workbookPasswordInput").fill("wrong-password");
+  await page.getByRole("button", { name: "打开工作簿" }).click();
+  await expect(page.locator("#workbookPasswordError")).toContainText(
+    "密码不正确",
+  );
+  await expect(page.locator("#workbookPasswordInput")).toHaveValue("");
+
+  await page
+    .locator("#workbookPasswordInput")
+    .fill("synthetic-base-password");
+  await page.getByRole("button", { name: "打开工作簿" }).click();
+  await expect(page.locator("#loadingOverlay")).toBeHidden({
+    timeout: 30_000,
+  });
+  await expect(page.locator("#workspaceView")).toBeVisible();
+  await expect(page.locator("#targetPeriodText")).toHaveText("2025年12月");
+
+  const encryptedInsurance = await encryptedWorkbookPayload(
+    page,
+    regularAttachments[1],
+    "synthetic-attachment-password",
+  );
+  const taxPayload = {
+    name: path.basename(regularAttachments[0]),
+    mimeType: "application/vnd.ms-excel",
+    buffer: fs.readFileSync(regularAttachments[0]),
+  };
+  await page.locator('[data-tab="attachments"]').click();
+  await page
+    .locator("#attachmentFilesInput")
+    .setInputFiles([taxPayload, encryptedInsurance]);
+  await expect(dialog).toBeVisible();
+  await expect(page.locator("#workbookPasswordFile")).toHaveText(
+    encryptedInsurance.name,
+  );
+  await page
+    .locator("#workbookPasswordInput")
+    .fill("synthetic-attachment-password");
+  await page.getByRole("button", { name: "打开工作簿" }).click();
+  await expect(page.locator("#loadingOverlay")).toBeHidden({
+    timeout: 30_000,
+  });
+
+  const evidence = await page.evaluate(() => {
+    const state = window.PayrollLocal.ui.state;
+    return {
+      attachmentErrors: state.attachments.errors,
+      categories: state.attachments.results.map(
+        (result) => result.category,
+      ),
+      passwordState: Object.hasOwn(state, "password"),
+      localStorageKeys: Object.keys(window.localStorage),
+      sessionStorageKeys: Object.keys(window.sessionStorage),
+    };
+  });
+  expect(evidence).toEqual({
+    attachmentErrors: [],
+    categories: ["个税工资薪金附件", "社保 / 公积金附件"],
+    passwordState: false,
+    localStorageKeys: [],
+    sessionStorageKeys: [],
+  });
+  await expect(dialog).toBeHidden();
+  await expect(page.locator("#workbookPasswordInput")).toHaveValue("");
   expect(pageErrors).toEqual([]);
 });
 
@@ -639,6 +776,44 @@ test("长表、宽表和月份冲突规则保持独立", async ({ page }) => {
       "2025-12",
       "合成长表",
     );
+    const coverage = window.PayrollEngine.resolveAttachment(
+      "社保 / 公积金附件",
+      window.PayrollEngine.tableFromMatrix(
+        [
+          [
+            "姓名",
+            "身份证号",
+            "养老个人",
+            "医疗个人",
+            "失业个人",
+            "公积金个人",
+            "个人合计",
+            "公司合计",
+          ],
+          ["覆盖甲", "SYNTHETIC-ID-A", 1, 1, 1, 1, 4, 8],
+          ["新增丙", "SYNTHETIC-ID-C", 1, 1, 1, 1, 4, 8],
+        ],
+        "2025.12",
+      ),
+      window.PayrollEngine.tableFromMatrix([
+        [
+          "人员编号",
+          "身份证",
+          "姓名",
+          "代扣养老保险",
+          "代扣医疗保险",
+          "代扣失业保险",
+          "代扣房积金",
+          "个人承担社保部分扣款合计",
+          "企业承担社保部分扣款合计",
+        ],
+        ["SYNTHETIC-A", "SYNTHETIC-ID-A", "覆盖甲", 1, 1, 1, 1, 4, 8],
+        ["SYNTHETIC-B", "SYNTHETIC-ID-B", "缺失乙", 1, 1, 1, 1, 4, 8],
+        ["SYNTHETIC-C", "SYNTHETIC-ID-C", "新增丙", "", "", "", "", "", ""],
+      ]),
+      "2025-12",
+      "2025.12合成保险表.xlsx",
+    );
     let periodConflict = "";
     try {
       window.PayrollLocal.ui.resolveCurrentPeriod("2025.10工资表.xlsx", [
@@ -659,6 +834,12 @@ test("长表、宽表和月份冲突规则保持独立", async ({ page }) => {
       ),
       longFormat: long.format,
       longStatuses: long.proposals.map((proposal) => proposal.status),
+      attachmentCoverage: {
+        matched: coverage.matchedPeople,
+        sourceMatched: coverage.sourceMatchedPeople,
+        expected: coverage.expectedPeople,
+        errors: coverage.errors,
+      },
       periodConflict,
     };
   });
@@ -667,6 +848,12 @@ test("长表、宽表和月份冲突规则保持独立", async ({ page }) => {
     wideReady: true,
     longFormat: "long",
     longStatuses: ["ready", "error"],
+    attachmentCoverage: {
+      matched: 1,
+      sourceMatched: 2,
+      expected: 2,
+      errors: ["工资表有 1 人未在该来源表中出现"],
+    },
     periodConflict: "文件名月份与工资表标题月份不一致",
   });
 });

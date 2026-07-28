@@ -21,11 +21,12 @@ if (!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(releaseVersion)) {
 }
 
 const packageName = `工资表工具-通用版-v${releaseVersion}`;
+const archiveName = `china-payroll-workflow-universal-v${releaseVersion}`;
 const archivePath = path.join(
   projectDirectory,
   "output",
   "releases",
-  `${packageName}.zip`,
+  `${archiveName}.zip`,
 );
 const entries = [
   ...(await collectTree(

@@ -118,6 +118,14 @@
       );
     }
 
+    async getTables(sheetName) {
+      const sheetRecord = await this.loadSheetRecord(sheetName);
+      return api.buildTablesFromSheet(
+        sheetRecord,
+        this.sharedStrings,
+      );
+    }
+
     async getCell(sheetName, rowNumber, columnNumber) {
       return api.getCell(this, sheetName, rowNumber, columnNumber);
     }
@@ -185,6 +193,23 @@
         columnNumber,
         value,
         options,
+      );
+    }
+
+    async updateFormulaCell(
+      sheetName,
+      rowNumber,
+      columnNumber,
+      formula,
+      cachedValue,
+    ) {
+      return api.updateFormulaCell(
+        this,
+        sheetName,
+        rowNumber,
+        columnNumber,
+        formula,
+        cachedValue,
       );
     }
 

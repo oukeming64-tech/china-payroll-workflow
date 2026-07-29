@@ -1,9 +1,7 @@
 (() => {
   "use strict";
-
   const api = window.PayrollLocal.rules;
-
-  const BUSINESS_SOURCE_PROFILES = Object.freeze([
+  const HISTORICAL_BUSINESS_SOURCE_PROFILES = Object.freeze([
     Object.freeze({
       id: "intern-allowance",
       label: "实习生津贴表",
@@ -21,6 +19,8 @@
             "2025年2月历史附件与正式工资表逐人核对，2/2 个可比人员的津贴总额对应基本工资",
         }),
       ]),
+      matchBy: Object.freeze(["idCard"]),
+      onlyChanged: true,
       requirePeriod: true,
     }),
     Object.freeze({
@@ -77,34 +77,33 @@
       requirePeriod: false,
     }),
   ]);
-
+  const BUSINESS_SOURCE_PROFILES = Object.freeze([
+    ...(api.MONTHLY_CHANGE_SOURCE_PROFILES || []),
+    ...HISTORICAL_BUSINESS_SOURCE_PROFILES,
+  ]);
   const BUSINESS_SOURCE_RULE_META = Object.freeze({
-    id: "historical-business-source-adapters",
-    trigger: "在人员 / 工资变动入口选择历史业务附件",
+    id: "business-source-adapters",
+    trigger: "选择目标月份全量附件或在人员 / 工资变动入口选择业务附件",
     policy:
-      "只转换历史附件与正式工资表逐人证明过的字段；人员名单或缺金额资料只提示，不推算金额",
+      "身份证存在时只按身份证匹配；只转换附件明确给出的目标字段，缺金额资料只提示，不推算金额",
     profiles: Object.freeze(
       BUSINESS_SOURCE_PROFILES.map((profile) => profile.id),
     ),
   });
-
   function headerForAny(table, aliases) {
     return api.headerForAliases(table, aliases);
   }
-
   function normalizedFilenameMatches(profile, fileName) {
     const key = api.normalizeText(fileName);
     return profile.filenameAny.some((term) =>
       key.includes(api.normalizeText(term)),
     );
   }
-
   function profileHeadersMatch(profile, table) {
     return profile.requiredHeaders.every((aliases) =>
       headerForAny(table, aliases),
     );
   }
-
   function matchBusinessSource(table, fileName) {
     return (
       BUSINESS_SOURCE_PROFILES.find(
@@ -114,7 +113,6 @@
       ) || null
     );
   }
-
   function businessSourcePeriod(fileName, sheetName = "") {
     const regular = api.detectPeriod(fileName, sheetName);
     if (regular) {
@@ -130,7 +128,6 @@
     }
     return "";
   }
-
   function resolvedMappings(profile, sourceTable, targetTable) {
     return profile.mappings.map((mapping) => ({
       sourceHeader: headerForAny(sourceTable, mapping.source),
@@ -139,6 +136,12 @@
       targetField: mapping.target,
       basis: mapping.basis,
     }));
+  }
+  function matchSourcePerson(targetIndex, identity, profile) {
+    return api.matchPerson(targetIndex, identity, {
+      matchBy: profile.matchBy || ["employeeId", "idCard", "name"],
+      stopAfterPresent: Boolean(profile.matchBy),
+    });
   }
 
   function proposalsFromBusinessSource(
@@ -155,15 +158,6 @@
         mappings: [],
         proposals: [],
         errors: ["没有找到经历史证明的业务附件规则"],
-      };
-    }
-    if (profile.nonActionable) {
-      return {
-        profile,
-        format: "business-source",
-        mappings: [],
-        proposals: [],
-        errors: [profile.nonActionable],
       };
     }
     const sourcePeriod = businessSourcePeriod(
@@ -194,12 +188,107 @@
         ],
       };
     }
+    if (profile.adapter === "attendance-deductions") {
+      return api.proposalsFromAttendanceSource(
+        sourceTable,
+        targetTable,
+        targetPeriod,
+        sourceName,
+        profile,
+        sourcePeriod,
+      );
+    }
+    if (profile.adapter === "salary-events") {
+      return api.proposalsFromSalaryEventSource(
+        sourceTable,
+        targetTable,
+        targetPeriod,
+        sourceName,
+        profile,
+        sourcePeriod,
+      );
+    }
+    if (profile.adapter === "employment-events") {
+      return api.proposalsFromEmploymentEventSource(
+        sourceTable,
+        targetTable,
+        targetPeriod,
+        sourceName,
+        profile,
+        sourcePeriod,
+      );
+    }
+    const identities = api.identityHeaders(sourceTable);
+    const errors = [];
+    const warnings = [];
+    const requiredIdentity = profile.matchBy?.[0];
+    if (requiredIdentity && !identities[requiredIdentity]) {
+      errors.push(
+        requiredIdentity === "idCard"
+          ? "业务附件缺少身份证号，不能按身份证匹配"
+          : "业务附件缺少必要的人员匹配字段",
+      );
+    } else if (
+      !identities.employeeId &&
+      !identities.idCard &&
+      !identities.name
+    ) {
+      errors.push("业务附件缺少人员编号、身份证或姓名");
+    }
+    if (profile.nonActionable) {
+      errors.push(profile.nonActionable);
+    }
+    if (errors.length) {
+      return {
+        profile,
+        sourcePeriod,
+        format: "business-source",
+        mappings: [],
+        proposals: [],
+        warnings,
+        errors,
+      };
+    }
+    if (profile.reviewOnly) {
+      const targetIndex = api.indexPeople(targetTable);
+      let matchedPeople = 0;
+      let unmatchedPeople = 0;
+      for (const sourceRow of sourceTable.rows) {
+        const identity = api.identityFromRow(sourceRow, identities);
+        if (!profile.matchBy.some((kind) => api.asText(identity[kind]))) {
+          continue;
+        }
+        const match = matchSourcePerson(targetIndex, identity, profile);
+        if (match.status === "matched") {
+          matchedPeople += 1;
+        } else {
+          unmatchedPeople += 1;
+        }
+      }
+      if (unmatchedPeople) {
+        errors.push(`来源表有 ${unmatchedPeople} 人未按身份证匹配工资表`);
+      }
+      if (!matchedPeople && !unmatchedPeople) {
+        errors.push("业务附件没有可读取的身份证人员行");
+      }
+      warnings.push(profile.reviewOnly);
+      return {
+        profile,
+        sourcePeriod,
+        format: "business-source-review",
+        mappings: [],
+        proposals: [],
+        matchedPeople,
+        unmatchedPeople,
+        warnings,
+        errors,
+      };
+    }
     const mappings = resolvedMappings(
       profile,
       sourceTable,
       targetTable,
     );
-    const errors = [];
     for (const mapping of mappings) {
       if (!mapping.sourceHeader) {
         errors.push(`业务附件缺少“${mapping.sourceField}”`);
@@ -208,22 +297,20 @@
         errors.push(`工资表缺少“${mapping.targetField}”`);
       }
     }
-    const identities = api.identityHeaders(sourceTable);
-    if (!identities.employeeId && !identities.idCard && !identities.name) {
-      errors.push("业务附件缺少人员编号、身份证或姓名");
-    }
     if (errors.length) {
       return {
         profile,
         format: "business-source",
         mappings,
         proposals: [],
+        warnings,
         errors,
       };
     }
 
     const targetIndex = api.indexPeople(targetTable);
     const proposals = [];
+    let mappedValues = 0;
     for (const sourceRow of sourceTable.rows) {
       const populatedMappings = mappings.filter((mapping) =>
         api.asText(sourceRow.get(mapping.sourceHeader.name)),
@@ -231,9 +318,22 @@
       if (!populatedMappings.length) {
         continue;
       }
+      mappedValues += populatedMappings.length;
       const identity = api.identityFromRow(sourceRow, identities);
-      const match = api.matchPerson(targetIndex, identity);
+      const match = matchSourcePerson(targetIndex, identity, profile);
       for (const mapping of populatedMappings) {
+        const inputValue = sourceRow.get(mapping.sourceHeader.name);
+        const currentValue =
+          match.status === "matched"
+            ? match.person.row.get(mapping.targetHeader.name)
+            : null;
+        if (
+          profile.onlyChanged &&
+          match.status === "matched" &&
+          api.sameValue(currentValue, inputValue)
+        ) {
+          continue;
+        }
         const proposal = api.proposalBase(
           sourceName,
           sourceRow.rowNumber,
@@ -244,7 +344,7 @@
           operation: "设置",
           period: targetPeriod,
           field: mapping.targetHeader,
-          inputValue: sourceRow.get(mapping.sourceHeader.name),
+          inputValue,
           mapping,
           sourceKind: profile.id,
         });
@@ -257,9 +357,7 @@
         } else {
           proposal.person = match.person;
           proposal.matchedBy = match.matchedBy;
-          proposal.currentValue = match.person.row.get(
-            mapping.targetHeader.name,
-          );
+          proposal.currentValue = currentValue;
         }
         const sourceCell = sourceRow.cells.get(
           mapping.sourceHeader.column,
@@ -272,8 +370,10 @@
         proposals.push(proposal);
       }
     }
-    if (!proposals.length) {
+    if (!proposals.length && !mappedValues) {
       errors.push("业务附件没有形成可核对的人员金额");
+    } else if (!proposals.length) {
+      warnings.push("附件字段与当前草案一致，没有形成重复写入项");
     }
     return {
       profile,
@@ -281,6 +381,7 @@
       format: "business-source",
       mappings,
       proposals,
+      warnings,
       errors,
     };
   }

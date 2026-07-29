@@ -139,7 +139,7 @@
             <span class="rule-icon">附</span>
             <div>
               <strong>核对目标月份工资附件</strong>
-              <p>写入个税、社保和适用的劳务费数据后生成无外链文件。</p>
+              <p>一次读取全部附件，按身份证综合核对后生成无外链文件。</p>
             </div>
             <button class="btn btn-secondary" data-open-tab="attachments">
               处理
@@ -191,8 +191,8 @@
                 hidden
               />
               <span>＋</span>
-              <strong>选择目标月份工资附件</strong>
-              <small>个税、保险和适用的劳务费文件，可一次多选</small>
+              <strong>选择目标月份全部工资附件</strong>
+              <small>有多少选多少，按身份证自动匹配；Excel 临时文件会忽略</small>
             </label>
             <div id="attachmentErrors" class="inline-errors" hidden></div>
           </section>
@@ -483,6 +483,16 @@
 
         <section id="tab-diagnostics" class="tab-panel">
           <section class="panel">
+            <div class="panel-head">
+              <div>
+                <h2>工资表需求覆盖</h2>
+                <p>按需求原文逐项说明自动处理、资料核对和停止条件。</p>
+              </div>
+            </div>
+            <div id="requirementCoverageList" class="diagnostic-list"></div>
+          </section>
+
+          <section class="panel">
             <div class="panel-head compact-head">
               <h2>来源推进</h2>
             </div>
@@ -525,6 +535,7 @@
     <script src="./core/namespace.js"></script>
     <script src="./excel/xml.js"></script>
     <script src="./excel/table.js"></script>
+    <script src="./excel/table-regions.js"></script>
     <script src="./excel/mutations.js"></script>
     <script src="./excel/periods.js"></script>
     <script src="./excel/external-links.js"></script>
@@ -544,18 +555,27 @@
     <script src="./rules/natural-language.js"></script>
     <script src="./rules/tabular-changes.js"></script>
     <script src="./rules/external-source.js"></script>
+    <script src="./rules/monthly-change-sources.js"></script>
+    <script src="./rules/salary-event-proration.js"></script>
+    <script src="./rules/employment-events.js"></script>
+    <script src="./rules/salary-events.js"></script>
+    <script src="./rules/attendance-deductions.js"></script>
     <script src="./rules/business-sources.js"></script>
     <script src="./rules/attachment-periods.js"></script>
+    <script src="./rules/labor-fee-review.js"></script>
     <script src="./rules/attachment-resolution.js"></script>
+    <script src="./rules/attachment-batch.js"></script>
     <script src="./rules/workbook-personnel.js"></script>
     <script src="./rules/social-base-july.js"></script>
     <script src="./payroll-engine.js"></script>
     <script src="./ui/state.js"></script>
     <script src="./ui/password-flow.js"></script>
     <script src="./ui/render.js"></script>
+    <script src="./ui/requirements-render.js"></script>
     <script src="./ui/workbook-flow.js"></script>
     <script src="./ui/attachment-flow.js"></script>
     <script src="./ui/personnel-sync-flow.js"></script>
+    <script src="./ui/source-regions-flow.js"></script>
     <script src="./ui/change-flow.js"></script>
     <script src="./ui/social-base-flow.js"></script>
     <script src="./ui/export-flow.js"></script>

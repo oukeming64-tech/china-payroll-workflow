@@ -36,7 +36,11 @@
     baseHash: "",
     attachments: {
       required: [],
+      inputs: [],
       results: [],
+      files: [],
+      ignoredFiles: [],
+      inputErrors: [],
       updates: [],
       errors: [],
       applied: false,

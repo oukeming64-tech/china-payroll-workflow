@@ -57,25 +57,6 @@
       )[0];
   }
 
-  async function chooseSourceTable(workbook, diagnostic) {
-    const referencedSheetNames = [
-      ...new Set(
-        (diagnostic?.references || [])
-          .map((reference) => reference.sourceSheet)
-          .filter(Boolean),
-      ),
-    ];
-    for (const name of referencedSheetNames) {
-      if (workbook.sheetByName.has(name)) {
-        return workbook.getTable(name);
-      }
-    }
-    const scores = await workbook.scoreSheetsAgainst(
-      ui.state.table.headers.map((header) => header.name),
-    );
-    return scores.length ? workbook.getTable(scores[0].name) : null;
-  }
-
   function looksLikeChangeTable(table) {
     const headerKeys = new Set(
       table.headers.map((header) => rules.normalizeText(header.name)),
@@ -124,25 +105,23 @@
     const category = rules.classifySource(file.name);
     const workbook = await ui.loadWorkbookFile(file);
     const diagnostic = matchingDiagnostic(file.name, category);
-    const table = await chooseSourceTable(workbook, diagnostic);
+    const inspection = await ui.inspectWorkbookBusinessRegions(
+      workbook,
+      diagnostic,
+      ui.state.table,
+      ui.state.targetPeriod,
+      file.name,
+      role,
+    );
+    const table = inspection.table;
     if (!table) {
       throw new Error(`${file.name} 没有可识别的工作表`);
     }
-    const businessProfile = rules.matchBusinessSource(
-      table,
-      file.name,
-    );
     let result;
     let resolvedCategory = category;
-    if (businessProfile) {
-      result = rules.proposalsFromBusinessSource(
-        table,
-        ui.state.table,
-        ui.state.targetPeriod,
-        role,
-        businessProfile,
-      );
-      resolvedCategory = businessProfile.label;
+    if (inspection.result) {
+      result = inspection.result;
+      resolvedCategory = result.labels.join("、");
     } else if (looksLikeChangeTable(table)) {
       result = rules.proposalsFromChangeTable(
         table,
@@ -171,16 +150,25 @@
           ? "人员 / 工资变动表（宽表）"
           : "人员 / 工资变动表（长表）";
     }
+    if (options.automaticAttachment) {
+      for (const proposal of result.proposals || []) {
+        proposal.automaticAttachment = true;
+      }
+    }
     appendProposals(result);
     ui.state.sources.push({
       name: file.name,
       category: resolvedCategory,
-      sheetName: table.sheetName,
+      profileId:
+        result.profileIds?.join(",") || result.profile?.id || "",
+      sheetName: result.sheetName || table.sheetName,
       mappingCount: result.mappings?.length || 0,
       format: result.format || "external",
       proposalCount: result.proposals.length,
       errors: result.errors,
+      warnings: result.warnings || [],
       automatic: options.automatic,
+      automaticAttachment: Boolean(options.automaticAttachment),
     });
     ui.renderSources();
     if (!options.automatic) {
@@ -328,11 +316,20 @@
       const attachmentWasChecked =
         ui.state.attachments.applied ||
         ui.state.attachments.results.length > 0;
-      ui.invalidateAttachmentResolution(
-        attachmentWasChecked
-          ? "草案发生变动，请重新核对目标月份工资附件"
-          : "",
-      );
+      if (
+        attachmentWasChecked &&
+        ui.state.attachments.inputs?.length
+      ) {
+        await ui.refreshAttachmentResolution(
+          "草案发生变动，已用本批附件重新核对",
+        );
+      } else {
+        ui.invalidateAttachmentResolution(
+          attachmentWasChecked
+            ? "草案发生变动，请重新核对目标月份工资附件"
+            : "",
+        );
+      }
       ui.renderAll();
       ui.toast(`${appliedIds.size} 项变动已写入当前草案`);
     } catch (error) {

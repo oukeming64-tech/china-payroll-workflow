@@ -6,8 +6,15 @@
     !rules?.parseNaturalLanguage ||
     !rules?.socialBaseCandidates ||
     !rules?.resolveAttachment ||
+    !rules?.resolveAttachmentBatch ||
     !rules?.monthlyBusinessPlan ||
-    !rules?.proposalsFromBusinessSource
+    !rules?.MONTHLY_CHANGE_SOURCE_PROFILES ||
+    !rules?.salaryEventTiming ||
+    !rules?.proposalsFromEmploymentEventSource ||
+    !rules?.proposalsFromSalaryEventSource ||
+    !rules?.proposalsFromAttendanceSource ||
+    !rules?.proposalsFromBusinessSource ||
+    !rules?.auditLaborFeeAmounts
   ) {
     throw new Error("工资规则模块加载顺序不完整");
   }

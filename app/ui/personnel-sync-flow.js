@@ -21,13 +21,21 @@
       proposal.operation,
       rules.proposalInputValue(proposal),
     );
-    const result = await ui.state.workbook.updateCell(
-      ui.state.mainSheetName,
-      proposal.person.rowNumber,
-      proposal.field.column,
-      after,
-      { preserveFormula: true },
-    );
+    const result = proposal.formula
+      ? await ui.state.workbook.updateFormulaCell(
+          ui.state.mainSheetName,
+          proposal.person.rowNumber,
+          proposal.field.column,
+          proposal.formula,
+          after,
+        )
+      : await ui.state.workbook.updateCell(
+          ui.state.mainSheetName,
+          proposal.person.rowNumber,
+          proposal.field.column,
+          after,
+          { preserveFormula: true },
+        );
     const fieldName = proposal.field.name;
     const directSyncFields = new Set([
       "身份证",
@@ -77,7 +85,7 @@
     ui.state.history.push({
       time: new Date().toLocaleTimeString("zh-CN"),
       label: `${proposal.person.maskedName} · ${proposal.field.displayName}`,
-      detail: `${proposal.operation}：${ui.formatValue(proposal.currentValue)} → ${ui.formatValue(after)}；来源 ${proposal.source}${result.preservedFormula ? "；目标公式已保留，仅更新缓存值" : ""}${syncResults.length ? `；同步 ${syncResults.filter((item) => item.updated).length} 张辅助表` : ""}`,
+      detail: `${proposal.operation}：${ui.formatValue(proposal.currentValue)} → ${ui.formatValue(after)}；来源 ${proposal.source}${result.wroteFormula ? "；已写入需求公式和预览金额" : result.preservedFormula ? "；目标公式已保留，仅更新缓存值" : ""}${syncResults.length ? `；同步 ${syncResults.filter((item) => item.updated).length} 张辅助表` : ""}`,
       kind: "cell-change",
     });
   }

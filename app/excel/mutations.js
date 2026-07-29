@@ -70,6 +70,25 @@
     cell.appendChild(inline);
   }
 
+  function setCellFormula(cell, formula, cachedValue = null) {
+    for (const child of [...cell.childNodes]) {
+      if (
+        child.nodeType === Node.ELEMENT_NODE &&
+        ["f", "v", "is"].includes(child.localName)
+      ) {
+        child.remove();
+      }
+    }
+    cell.removeAttribute("t");
+    const formulaNode = cell.ownerDocument.createElementNS(
+      api.MAIN_NS,
+      "f",
+    );
+    formulaNode.textContent = String(formula || "").replace(/^=/, "");
+    cell.appendChild(formulaNode);
+    setFormulaCache(cell, cachedValue);
+  }
+
   function getOrCreateCell(documentNode, rowNumber, columnNumber) {
     const reference = `${api.columnNumberToLetters(columnNumber)}${rowNumber}`;
     const sheetData = api.firstByLocalName(documentNode, "sheetData");
@@ -157,6 +176,31 @@
       before,
       after: api.cellDescriptor(cell, workbook.sharedStrings),
       preservedFormula: preserveFormula,
+    };
+  }
+
+  async function updateFormulaCell(
+    workbook,
+    sheetName,
+    rowNumber,
+    columnNumber,
+    formula,
+    cachedValue,
+  ) {
+    const sheetRecord = await workbook.loadSheetRecord(sheetName);
+    const cell = getOrCreateCell(
+      sheetRecord.document,
+      Number(rowNumber),
+      Number(columnNumber),
+    );
+    const before = api.cellDescriptor(cell, workbook.sharedStrings);
+    setCellFormula(cell, formula, cachedValue);
+    setCalcMode(workbook.workbookDocument);
+    workbook.dirtySheetPaths.add(sheetRecord.path);
+    return {
+      before,
+      after: api.cellDescriptor(cell, workbook.sharedStrings),
+      wroteFormula: true,
     };
   }
 
@@ -308,10 +352,12 @@
   Object.assign(api, {
     setFormulaCache,
     setDirectCellValue,
+    setCellFormula,
     getOrCreateCell,
     setCalcMode,
     getCell,
     updateCell,
+    updateFormulaCell,
     findReservedBlankRows,
     cloneEmployeeRow,
     setRowHidden,

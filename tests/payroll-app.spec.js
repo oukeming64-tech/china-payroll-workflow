@@ -54,6 +54,22 @@ const januaryAttachments = [
     "2026年劳务费-示例.xlsx",
   ),
 ];
+const januaryChangeAttachments = [
+  "员工动态表",
+  "入职转正薪资",
+  "实习生津贴表",
+  "考勤表",
+].map((label) =>
+  path.join(
+    fixtureRoot,
+    "2026.01工资附件",
+    `2026年1月${label}-示例.xlsx`,
+  ),
+);
+const januaryFullAttachments = [
+  ...januaryAttachments,
+  ...januaryChangeAttachments,
+];
 const regularOutput = path.join(
   projectRoot,
   "output",
@@ -304,6 +320,84 @@ test("开始页保持简洁，只接收上月完整工资表", async ({ page }) 
     },
   ]);
   expect(pageErrors).toEqual([]);
+});
+
+test("考勤需求公式覆盖病假三档、事假、产假和工伤停止项", async ({
+  page,
+}) => {
+  await page.goto("/");
+  const audit = await page.evaluate(() => {
+    const rules = window.PayrollEngine;
+    const target = rules.tableFromMatrix([
+      [
+        "身份证",
+        "姓名",
+        "基本工资",
+        "岗位工资",
+        "绩效工资标准",
+        "工资合计",
+        "考勤扣款",
+      ],
+      ["ID-1", "甲", 3000, 5000, 2000, 10000, 0],
+      ["ID-2", "乙", 3000, 5000, 2000, 10000, 0],
+      ["ID-3", "丙", 3000, 5000, 2000, 10000, 0],
+      ["ID-4", "丁", 3000, 5000, 2000, 10000, 0],
+      ["ID-5", "戊", 3000, 5000, 2000, 10000, 0],
+    ]);
+    const source = rules.tableFromMatrix(
+      [
+        [
+          "身份证号",
+          "姓名",
+          "请假信息",
+          "",
+          "",
+          "",
+          "",
+        ],
+        ["", "", "", "扣款病假", "事假", "产假", "工伤"],
+        ["ID-1", "甲", "", 4, 1, 0, 0],
+        ["ID-2", "乙", "", 6, 0, 0, 0],
+        ["ID-3", "丙", "", 11, 0, 0, 0],
+        ["ID-4", "丁", "", 0, 0, 1, 0],
+        ["ID-5", "戊", "", 0, 0, 0, 2],
+      ],
+      "2026.06考勤",
+    );
+    const profile = rules.matchBusinessSource(
+      source,
+      "2026年6月考勤表-示例.xlsx",
+    );
+    const result = rules.proposalsFromBusinessSource(
+      source,
+      target,
+      "2026-06",
+      "2026年6月考勤表-示例.xlsx",
+      profile,
+    );
+    return result.proposals.map((proposal) => ({
+      status: proposal.status,
+      formula: proposal.formula || "",
+      errors: proposal.errors,
+      warnings: proposal.warnings,
+    }));
+  });
+  expect(audit).toHaveLength(5);
+  expect(audit[0].formula).toContain("*1%*4");
+  expect(audit[0].formula).toContain("/22*1");
+  expect(audit[0].warnings).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining("不足缴纳社保和公积金"),
+    ]),
+  );
+  expect(audit[1].formula).toContain("*1.5%*6");
+  expect(audit[2].formula).toContain("/22*50%*11");
+  expect(audit[3].errors).toEqual(
+    expect.arrayContaining([expect.stringContaining("产假待遇")]),
+  );
+  expect(audit[4].errors).toEqual(
+    expect.arrayContaining([expect.stringContaining("停工留薪期")]),
+  );
 });
 
 test("历史业务附件按已证明字段映射，只有名单没有金额时停止", async ({
@@ -610,6 +704,380 @@ test("三类附件仅一份加密且工作表名仍为上月时完整读取", as
   await expect(page.locator("#attachmentCards")).toContainText(
     "已按唯一字段结构读取",
   );
+  expect(pageErrors).toEqual([]);
+});
+
+test("七份附件全量读取并以身份证严格匹配人员变动", async ({
+  page,
+}) => {
+  const pageErrors = [];
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+  await openJanuaryWorkspace(page);
+
+  await page.locator('[data-tab="diagnostics"]').click();
+  await expect(
+    page.locator("#requirementCoverageList .diagnostic-card"),
+  ).toHaveCount(11);
+  await expect(page.locator("#requirementCoverageList")).toContainText(
+    "月内转正必须有转正天数",
+  );
+  await expect(page.locator("#requirementCoverageList")).toContainText(
+    "离职前近12个月工资总额月均",
+  );
+
+  await page.locator('[data-tab="attachments"]').click();
+  await page.locator("#attachmentFilesInput").setInputFiles([
+    ...januaryFullAttachments.map((sourcePath) => ({
+      name: path.basename(sourcePath),
+      mimeType: sourcePath.endsWith(".xls")
+        ? "application/vnd.ms-excel"
+        : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      buffer: fs.readFileSync(sourcePath),
+    })),
+    {
+      name: "~$2026年1月考勤表-示例.xlsx",
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      buffer: Buffer.from("synthetic temporary lock"),
+    },
+  ]);
+  await expect(page.locator("#loadingOverlay")).toBeHidden({
+    timeout: 30_000,
+  });
+  await expect(page.locator("#attachmentSummary")).toContainText(
+    "7/7 个文件已读取",
+  );
+
+  const intake = await page.evaluate(() => {
+    const state = window.PayrollLocal.ui.state;
+    const labor = state.attachments.results.find(
+      (result) => result.category === "劳务费附件",
+    );
+    return {
+      files: state.attachments.files.length,
+      ignoredFiles: state.attachments.ignoredFiles,
+      coreCategories: state.attachments.results.map(
+        (result) => result.category,
+      ),
+      changeProfiles: state.sources
+        .filter((source) => source.automaticAttachment)
+        .map((source) => source.profileId),
+      automaticProposals: state.proposals
+        .filter((proposal) => proposal.automaticAttachment)
+        .map((proposal) => ({
+          field: proposal.field?.name || "",
+          matchedBy: proposal.matchedBy || "",
+          status: proposal.status,
+        })),
+      laborWarnings: labor?.warnings || [],
+      errors: state.attachments.errors,
+    };
+  });
+  expect(intake.files).toBe(7);
+  expect(intake.ignoredFiles).toEqual([
+    "~$2026年1月考勤表-示例.xlsx",
+  ]);
+  expect(intake.coreCategories).toEqual([
+    "个税工资薪金附件",
+    "社保 / 公积金附件",
+    "劳务费附件",
+  ]);
+  expect(intake.changeProfiles).toEqual([
+    "employee-regularization-review,employee-dynamics,employee-salary-adjustment-review",
+    "probation-salary,salary-transfer-review,salary-adjustment",
+    "intern-allowance",
+    "attendance-register",
+  ]);
+  expect(intake.automaticProposals).toEqual([
+    {
+      field: "岗位",
+      matchedBy: "idCard",
+      status: "ready",
+    },
+  ]);
+  expect(intake.laborWarnings).toEqual([
+    expect.stringContaining("没有身份证号"),
+  ]);
+  expect(intake.errors).toEqual([
+    expect.stringContaining("1 项人员 / 工资变动待确认"),
+  ]);
+  await expect(page.locator("#applyAttachmentsBtn")).toBeDisabled();
+
+  const strictIdentity = await page.evaluate(() => {
+    const state = window.PayrollLocal.ui.state;
+    const table = window.XlsxEngine.buildTableFromMatrix(
+      [
+        [
+          "身份证号",
+          "姓名",
+          "转正日期",
+          "部门",
+          "岗位",
+          "基本工资",
+          "岗位工资",
+          "绩效工资",
+        ],
+        [
+          "SYNTHETIC-ID-WRONG",
+          "测试甲",
+          "2026-01-01",
+          "",
+          "",
+          1800,
+          3000,
+          1200,
+        ],
+      ],
+      "严格身份证测试",
+    );
+    const profile = window.PayrollEngine.matchBusinessSource(
+      table,
+      "2026年1月入职转正薪资-示例.xlsx",
+    );
+    const result = window.PayrollEngine.proposalsFromBusinessSource(
+      table,
+      state.table,
+      state.targetPeriod,
+      "2026年1月入职转正薪资-示例.xlsx",
+      profile,
+    );
+    return result.proposals.map((proposal) => ({
+      person: Boolean(proposal.person),
+      status: proposal.status,
+      errors: proposal.errors,
+    }));
+  });
+  expect(strictIdentity).toEqual([
+    {
+      person: false,
+      status: "error",
+      errors: [
+        expect.stringContaining(
+          "身份证号未匹配到人员，已禁止改用其他字段兜底",
+        ),
+      ],
+    },
+  ]);
+
+  const regularizationProration = await page.evaluate(() => {
+    const state = window.PayrollLocal.ui.state;
+    const build = (regularDays) => {
+      const headers = [
+        "身份证号",
+        "姓名",
+        "转正日期",
+        "基本工资",
+        "岗位工资",
+        "绩效工资",
+        "合计",
+      ];
+      if (regularDays !== null) {
+        headers.push("转正天数");
+      }
+      const row = [
+        "SYNTHETIC-ID-001",
+        "测试甲",
+        "2026-01-02",
+        2250,
+        3750,
+        1500,
+        7500,
+      ];
+      if (regularDays !== null) {
+        row.push(regularDays);
+      }
+      const table = window.XlsxEngine.buildTableFromMatrix(
+        [headers, row],
+        "转正按天测试",
+      );
+      const profile = window.PayrollEngine.matchBusinessSource(
+        table,
+        "2026年1月入职转正薪资-示例.xlsx",
+      );
+      return window.PayrollEngine.proposalsFromBusinessSource(
+        table,
+        state.table,
+        state.targetPeriod,
+        "2026年1月入职转正薪资-示例.xlsx",
+        profile,
+      );
+    };
+    const missing = build(null);
+    const complete = build(21);
+    const performance = complete.proposals.find(
+      (proposal) => proposal.field?.name === "绩效工资标准",
+    );
+    return {
+      missingError: missing.proposals[0]?.errors[0] || "",
+      completeErrors: complete.errors,
+      performanceValue: performance?.inputValue,
+      performanceFormula: performance?.formula,
+    };
+  });
+  expect(regularizationProration).toEqual({
+    missingError: expect.stringContaining("缺少“转正天数”"),
+    completeErrors: [],
+    performanceValue: 1431.82,
+    performanceFormula: "ROUND(1500/22*21,2)",
+  });
+
+  const employmentEvents = await page.evaluate(() => {
+    const state = window.PayrollLocal.ui.state;
+    const source = window.XlsxEngine.buildTableFromMatrix(
+      [
+        [
+          "身份证号",
+          "姓名",
+          "入职日期",
+          "离职日期",
+          "试用工资",
+          "工作天数",
+          "未发放绩效工资",
+        ],
+        [
+          "SYNTHETIC-ID-NEW",
+          "新增员工",
+          "2026-01-10",
+          "",
+          4400,
+          10,
+          "",
+        ],
+        [
+          "SYNTHETIC-ID-001",
+          "测试甲",
+          "",
+          "2026-01-20",
+          "",
+          15,
+          300,
+        ],
+      ],
+      "入离职测试",
+    );
+    const profile = window.PayrollEngine.matchBusinessSource(
+      source,
+      "2026年1月员工动态表-示例.xlsx",
+    );
+    const result = window.PayrollEngine.proposalsFromBusinessSource(
+      source,
+      state.table,
+      state.targetPeriod,
+      "2026年1月员工动态表-示例.xlsx",
+      profile,
+    );
+    return result.proposals.map((proposal) => ({
+      kind: proposal.kind,
+      errors: proposal.errors,
+      warnings: proposal.warnings,
+    }));
+  });
+  expect(employmentEvents).toEqual([
+    {
+      kind: "new-person",
+      errors: [
+        expect.stringContaining(
+          "试用工资、工作天数、完整人员信息、银行账号和实发合计",
+        ),
+      ],
+      warnings: [expect.stringContaining("入职工资预览")],
+    },
+    {
+      kind: "disable-person",
+      errors: [
+        expect.stringContaining(
+          "工作天数、未发绩效、实发合计及适用的近12个月补偿口径",
+        ),
+      ],
+      warnings: [expect.stringContaining("离职工资预览")],
+    },
+  ]);
+
+  const laborRequirementGuard = await page.evaluate(() => {
+    const state = window.PayrollLocal.ui.state;
+    const lowTierSource = window.XlsxEngine.buildTableFromMatrix(
+      [
+        ["姓名", "劳务费", "增值税税额"],
+        ["测试劳务", 3000, 0],
+      ],
+      "劳务费正常变动测试",
+    );
+    const highTierSource = window.XlsxEngine.buildTableFromMatrix(
+      [
+        ["姓名", "劳务费", "增值税税额"],
+        ["测试劳务", 30000, 0],
+      ],
+      "劳务费高档测试",
+    );
+    const resolve = (source) =>
+      window.PayrollEngine.resolveAttachment(
+        "劳务费附件",
+        source,
+        state.table,
+        state.targetPeriod,
+        "2026年劳务费-示例.xlsx",
+      );
+    const lowTier = resolve(lowTierSource);
+    const highTier = resolve(highTierSource);
+    return {
+      lowTier: {
+        errors: lowTier.errors,
+        warnings: lowTier.warnings,
+      },
+      highTier: {
+        errors: highTier.errors,
+        warnings: highTier.warnings,
+      },
+    };
+  });
+  expect(laborRequirementGuard.lowTier.errors).toEqual([]);
+  expect(laborRequirementGuard.lowTier.warnings).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining("劳务费金额复核（不阻断写入）"),
+      expect.stringContaining("临时劳务费或本月新增"),
+    ]),
+  );
+  expect(laborRequirementGuard.highTier.errors).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining("应纳税所得额超过20000元"),
+    ]),
+  );
+  expect(laborRequirementGuard.highTier.warnings).toEqual(
+    expect.arrayContaining([
+      expect.stringContaining("劳务费金额复核（不阻断写入）"),
+    ]),
+  );
+
+  await page.locator('[data-tab="changes"]').click();
+  await page.locator("#applyProposalsBtn").click();
+  await expect(page.locator("#loadingOverlay")).toBeHidden({
+    timeout: 30_000,
+  });
+  await page.locator('[data-tab="attachments"]').click();
+  await expect(page.locator("#applyAttachmentsBtn")).toBeEnabled();
+  await page.locator("#applyAttachmentsBtn").click();
+  await expect(page.locator("#loadingOverlay")).toBeHidden({
+    timeout: 30_000,
+  });
+  const applied = await page.evaluate(() => {
+    const state = window.PayrollLocal.ui.state;
+    const person = window.PayrollEngine
+      .buildPeople(state.table)
+      .people.find((item) => item.idCard === "SYNTHETIC-ID-001");
+    return {
+      position: person.row.get("岗位"),
+      files: state.attachments.files.length,
+      externalLinks: state.externalLinks.length,
+      externalFormulas:
+        state.formulaDiagnostics.externalFormulaNodes,
+    };
+  });
+  expect(applied).toEqual({
+    position: "新测试岗位",
+    files: 7,
+    externalLinks: 0,
+    externalFormulas: 0,
+  });
   expect(pageErrors).toEqual([]);
 });
 

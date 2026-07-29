@@ -189,6 +189,7 @@
                 <span class="status-chip ${source.errors?.length ? "warning" : ""}">${ui.escapeHtml(source.category)}</span>
               </div>
               <p>工作表：${ui.escapeHtml(source.sheetName || "未识别")} · 字段匹配 ${source.mappingCount || 0} · 形成预览 ${source.proposalCount || 0}</p>
+              ${source.warnings?.length ? `<p class="cell-warning">${ui.escapeHtml(source.warnings.join("；"))}</p>` : ""}
               ${source.errors?.length ? `<p class="cell-error">${ui.escapeHtml(source.errors.join("；"))}</p>` : ""}
             </article>`,
           )
@@ -209,16 +210,22 @@
       const result = byCategory.get(item.category);
       return result && !result.errors.length;
     }).length;
+    const readFiles = (audit.files || []).filter((file) => file.read).length;
+    const changeFiles = (audit.files || []).filter(
+      (file) => file.role === "change",
+    );
     ui.byId("attachmentBadge").textContent = audit.applied
       ? "✓"
       : `${ready}/${required.length}`;
     ui.byId("attachmentBanner").hidden = audit.applied;
     ui.byId("attachmentSummary").textContent = audit.applied
       ? "目标月份附件已写入，当前草案无外链。"
-      : audit.results.length
+      : changeFiles.length
+        ? `${readFiles}/${audit.files.length} 个文件已读取；${ready}/${required.length} 类工资字段附件通过，${changeFiles.length} 个变动文件已综合匹配。`
+        : audit.results.length
         ? `${audit.results.length}/${required.length} 类附件已读取，${ready}/${required.length} 类通过核对。`
         : `${ready}/${required.length} 类附件已通过核对。`;
-    ui.byId("attachmentCards").innerHTML = required
+    const requiredCards = required
       .map((item) => {
         const result = byCategory.get(item.category);
         const status = audit.applied && result
@@ -248,6 +255,18 @@
         </article>`;
       })
       .join("");
+    const changeCards = changeFiles
+      .map((file) => `<article class="diagnostic-card">
+        <div class="diagnostic-card-head">
+          <strong>${ui.escapeHtml(file.name)}</strong>
+          <span class="status-chip ${file.errors?.length ? "warning" : ""}">${ui.escapeHtml(file.category)}</span>
+        </div>
+        <p>字段匹配 ${file.mappingCount || 0} · 形成变动预览 ${file.proposalCount || 0}</p>
+        ${file.warnings?.length ? `<p class="cell-warning">${ui.escapeHtml(file.warnings.join("；"))}</p>` : ""}
+        ${file.errors?.length ? `<p class="cell-error">${ui.escapeHtml(file.errors.join("；"))}</p>` : ""}
+      </article>`)
+      .join("");
+    ui.byId("attachmentCards").innerHTML = requiredCards + changeCards;
     ui.byId("attachmentErrors").hidden = !audit.errors.length;
     ui.byId("attachmentErrors").innerHTML = audit.errors.length
       ? audit.errors
@@ -443,6 +462,7 @@
     renderAttachments();
     renderFormulaDiagnostics();
     renderSourceRouting();
+    ui.renderRequirementCoverage?.();
     renderMonthlyBusiness();
     renderDiagnostics();
     renderHistory();

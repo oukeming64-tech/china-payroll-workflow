@@ -67,6 +67,71 @@
     });
   }
 
+  function hasIdentityValue(valuesByColumn, identityColumns) {
+    return identityColumns.some((column) => {
+      const value = valuesByColumn.get(column);
+      return value !== null &&
+        value !== undefined &&
+        String(value).trim() !== "";
+    });
+  }
+
+  function sheetSubheaders(
+    cellsByRow,
+    headerRow,
+    headerColumns,
+    identityColumns,
+    sharedStrings,
+  ) {
+    const cells = cellsByRow.get(headerRow + 1);
+    if (!cells) {
+      return [];
+    }
+    const values = new Map(
+      [...cells.entries()].map(([column, cell]) => [
+        column,
+        api.cellDescriptor(cell, sharedStrings).value,
+      ]),
+    );
+    const candidates = [...values.entries()]
+      .filter(
+        ([, value]) =>
+          typeof value === "string" && String(value).trim(),
+      )
+      .map(([column, value]) => ({
+        column,
+        columnLabel: api.columnNumberToLetters(column),
+        name: String(value).trim(),
+      }));
+    if (
+      candidates.length < 2 ||
+      !candidates.some((header) => !headerColumns.has(header.column)) ||
+      hasIdentityValue(values, identityColumns)
+    ) {
+      return [];
+    }
+    return makeUniqueHeaderLabels(candidates);
+  }
+
+  function readableColumns(headers, subheaders) {
+    return [
+      ...new Set(
+        [...headers, ...subheaders].map((header) => header.column),
+      ),
+    ];
+  }
+
+  function columnForHeader(headers, subheaders, headerOrColumn) {
+    if (typeof headerOrColumn === "number") {
+      return headerOrColumn;
+    }
+    return [...headers, ...subheaders].find(
+      (header) =>
+        header.name === headerOrColumn ||
+        header.displayName === headerOrColumn,
+    )?.column;
+  }
+
   function buildTableFromSheet(sheetRecord, sharedStrings, options = {}) {
     const cellsByRow = api.rowCellMap(sheetRecord.document);
     const headerRow = detectHeaderRow(
@@ -92,32 +157,45 @@
         IDENTITY_HEADER_KEYS.has(api.normalizeText(header.name)),
       )
       .map((header) => header.column);
+    const subheaders = sheetSubheaders(
+      cellsByRow,
+      headerRow,
+      new Set(headers.map((header) => header.column)),
+      identityColumns,
+      sharedStrings,
+    );
+    const subheaderByColumn = new Map(
+      subheaders.map((header) => [header.column, header]),
+    );
+    const columns = readableColumns(headers, subheaders);
+    const dataStartRow = headerRow + (subheaders.length ? 1 : 0);
 
     const rows = [];
     const sortedRows = [...cellsByRow.keys()]
-      .filter((row) => row > headerRow)
+      .filter(
+        (row) =>
+          row > dataStartRow &&
+          (!options.endRow || row <= Number(options.endRow)),
+      )
       .sort((left, right) => left - right);
     for (const rowNumber of sortedRows) {
       const cellMap = cellsByRow.get(rowNumber);
       const values = new Map();
       const cells = new Map();
       let anyValue = false;
-      for (const header of headers) {
+      for (const column of columns) {
         const descriptor = api.cellDescriptor(
-          cellMap.get(header.column),
+          cellMap.get(column),
           sharedStrings,
         );
-        values.set(header.column, descriptor.value);
-        cells.set(header.column, descriptor);
+        values.set(column, descriptor.value);
+        cells.set(column, descriptor);
         if (descriptor.value !== null && descriptor.value !== "") {
           anyValue = true;
         }
       }
       const hasIdentity = identityColumns.length
-        ? identityColumns.some((column) => {
-            const value = values.get(column);
-            return value !== null && String(value).trim() !== "";
-          })
+        ? hasIdentityValue(values, identityColumns)
         : anyValue;
       if (!hasIdentity) {
         continue;
@@ -127,14 +205,11 @@
         values,
         cells,
         get(headerOrColumn) {
-          const column =
-            typeof headerOrColumn === "number"
-              ? headerOrColumn
-              : headers.find(
-                  (header) =>
-                    header.name === headerOrColumn ||
-                    header.displayName === headerOrColumn,
-                )?.column;
+          const column = columnForHeader(
+            headers,
+            subheaders,
+            headerOrColumn,
+          );
           return column ? values.get(column) : null;
         },
       });
@@ -146,6 +221,9 @@
       headerRow,
       headers,
       headerByColumn,
+      subheaders,
+      subheaderByColumn,
+      dataStartRow,
       rows,
       formulaCount: api.elementsByLocalName(
         sheetRecord.document,
@@ -204,6 +282,35 @@
     };
   }
 
+  function matrixSubheaders(
+    rows,
+    headerRow,
+    headerColumns,
+    identityColumns,
+  ) {
+    const values = Array.isArray(rows[headerRow])
+      ? rows[headerRow]
+      : [];
+    const byColumn = new Map(
+      values.map((value, index) => [index + 1, value]),
+    );
+    const candidates = values
+      .map((value, index) => ({
+        column: index + 1,
+        columnLabel: api.columnNumberToLetters(index + 1),
+        name: typeof value === "string" ? value.trim() : "",
+      }))
+      .filter((header) => header.name);
+    if (
+      candidates.length < 2 ||
+      !candidates.some((header) => !headerColumns.has(header.column)) ||
+      hasIdentityValue(byColumn, identityColumns)
+    ) {
+      return [];
+    }
+    return makeUniqueHeaderLabels(candidates);
+  }
+
   function buildTableFromMatrix(
     matrix,
     sheetName = "Sheet1",
@@ -231,21 +338,35 @@
         IDENTITY_HEADER_KEYS.has(api.normalizeText(header.name)),
       )
       .map((header) => header.column);
+    const subheaders = matrixSubheaders(
+      rows,
+      headerRow,
+      new Set(headers.map((header) => header.column)),
+      identityColumns,
+    );
+    const subheaderByColumn = new Map(
+      subheaders.map((header) => [header.column, header]),
+    );
+    const columns = readableColumns(headers, subheaders);
+    const dataStartRow = headerRow + (subheaders.length ? 1 : 0);
     const dataRows = [];
-    for (let index = headerRow; index < rows.length; index += 1) {
+    const endIndex = options.endRow
+      ? Math.min(rows.length, Number(options.endRow))
+      : rows.length;
+    for (let index = dataStartRow; index < endIndex; index += 1) {
       const sourceRow = Array.isArray(rows[index]) ? rows[index] : [];
       const metadataRow = options.metadata?.[index] || [];
       const values = new Map();
       const cells = new Map();
       let anyValue = false;
-      for (const header of headers) {
-        const value = sourceRow[header.column - 1] ?? null;
-        values.set(header.column, value);
+      for (const column of columns) {
+        const value = sourceRow[column - 1] ?? null;
+        values.set(column, value);
         cells.set(
-          header.column,
+          column,
           matrixCellDescriptor(
             value,
-            metadataRow[header.column - 1],
+            metadataRow[column - 1],
           ),
         );
         if (
@@ -257,14 +378,7 @@
         }
       }
       const hasIdentity = identityColumns.length
-        ? identityColumns.some((column) => {
-            const value = values.get(column);
-            return (
-              value !== null &&
-              value !== undefined &&
-              String(value).trim() !== ""
-            );
-          })
+        ? hasIdentityValue(values, identityColumns)
         : anyValue;
       if (!hasIdentity) {
         continue;
@@ -274,14 +388,11 @@
         values,
         cells,
         get(headerOrColumn) {
-          const column =
-            typeof headerOrColumn === "number"
-              ? headerOrColumn
-              : headers.find(
-                  (header) =>
-                    header.name === headerOrColumn ||
-                    header.displayName === headerOrColumn,
-                )?.column;
+          const column = columnForHeader(
+            headers,
+            subheaders,
+            headerOrColumn,
+          );
           return column ? values.get(column) : null;
         },
       });
@@ -292,6 +403,9 @@
       headerRow,
       headers,
       headerByColumn,
+      subheaders,
+      subheaderByColumn,
+      dataStartRow,
       rows: dataRows,
       formulaCount: dataRows.reduce(
         (count, row) =>

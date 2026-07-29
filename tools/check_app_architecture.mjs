@@ -44,6 +44,7 @@ const EXPECTED_SCRIPT_ORDER = [
   "./excel/schema.js",
   "./excel/cumulative.js",
   "./excel/personnel.js",
+  "./excel/payroll-sync.js",
   "./excel/workbook.js",
   "./excel/source-workbook.js",
   "./excel/docx-tables.js",
@@ -61,6 +62,8 @@ const EXPECTED_SCRIPT_ORDER = [
   "./rules/salary-events.js",
   "./rules/attendance-deductions.js",
   "./rules/business-sources.js",
+  "./rules/workbook-evidence-changes.js",
+  "./rules/workbook-evidence.js",
   "./rules/attachment-periods.js",
   "./rules/labor-fee-review.js",
   "./rules/attachment-resolution.js",
@@ -128,7 +131,7 @@ for (const filePath of FACADES) {
 const indexHtml = await fs.readFile(path.join(APP_ROOT, "index.html"), "utf8");
 const actualScriptOrder = [
   ...indexHtml.matchAll(/<script\s+src="([^"]+)"><\/script>/g),
-].map((match) => match[1]);
+].map((match) => match[1].replace(/[?#].*$/, ""));
 if (JSON.stringify(actualScriptOrder) !== JSON.stringify(EXPECTED_SCRIPT_ORDER)) {
   failures.push("app/index.html 的模块加载顺序与架构契约不一致");
 }

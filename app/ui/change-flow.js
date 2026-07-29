@@ -76,24 +76,38 @@
   async function importCsvSource(file, role) {
     const matrix = rules.parseCsv(await file.text());
     const table = rules.tableFromMatrix(matrix, file.name);
-    const result = rules.proposalsFromChangeTable(
-      table,
-      ui.state.table,
-      ui.state.targetPeriod,
-      role || file.name,
-    );
+    const profile = looksLikeChangeTable(table)
+      ? null
+      : rules.matchBusinessSource(table, file.name);
+    const result = profile
+      ? rules.proposalsFromBusinessSource(
+          table,
+          ui.state.table,
+          ui.state.targetPeriod,
+          role || file.name,
+          profile,
+        )
+      : rules.proposalsFromChangeTable(
+          table,
+          ui.state.table,
+          ui.state.targetPeriod,
+          role || file.name,
+        );
     appendProposals(result);
     ui.state.sources.push({
       name: file.name,
-      category:
-        result.format === "wide"
+      category: profile
+        ? profile.label
+        : result.format === "wide"
           ? "人员 / 工资变动表（宽表）"
           : "人员 / 工资变动表（长表）",
+      profileId: profile?.id || "",
       sheetName: table.sheetName,
       format: result.format,
-      mappingCount: 0,
+      mappingCount: result.mappings?.length || 0,
       proposalCount: result.proposals.length,
       errors: result.errors,
+      warnings: result.warnings || [],
     });
   }
 
@@ -291,7 +305,26 @@
         disabledRows: new Set(ui.state.disabledRows),
         workbookSync: [...ui.state.workbookSync],
       };
-      for (const proposal of selected) {
+      const reuseProviderIds = new Set(
+        selected.flatMap((proposal) =>
+          Object.values(proposal.auxiliaryReuse || {})
+            .map((reuse) => reuse.providerId)
+            .filter(Boolean),
+        ),
+      );
+      const ordered = selected
+        .map((proposal, index) => ({ proposal, index }))
+        .sort((left, right) => {
+          const leftProvider = reuseProviderIds.has(left.proposal.id)
+            ? 0
+            : 1;
+          const rightProvider = reuseProviderIds.has(right.proposal.id)
+            ? 0
+            : 1;
+          return leftProvider - rightProvider || left.index - right.index;
+        })
+        .map((item) => item.proposal);
+      for (const proposal of ordered) {
         if (proposal.kind === "cell-change") {
           await ui.applyWorkbookCellProposal(proposal);
         } else if (proposal.kind === "new-person") {
@@ -357,7 +390,9 @@
   }
 
   function clearProposals() {
-    ui.state.proposals = [];
+    ui.state.proposals = ui.state.proposals.filter(
+      (proposal) => proposal.workbookEvidence,
+    );
     ui.renderProposals();
   }
 

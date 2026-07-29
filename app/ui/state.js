@@ -25,6 +25,16 @@
     history: [],
     disabledRows: new Set(),
     personnelSheets: [],
+    workbookEvidence: {
+      sheetCount: 0,
+      recognizedRegions: [],
+      departures: [],
+      targetDepartures: [],
+      historicalDepartureRows: 0,
+      changeProposals: [],
+      warnings: [],
+      errors: [],
+    },
     workbookSync: [],
     monthlyBusiness: {
       period: "",

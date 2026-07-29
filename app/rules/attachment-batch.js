@@ -131,7 +131,12 @@
     };
   }
 
-  function resolveAttachmentBatch(inputs, targetTable, targetPeriod) {
+  function resolveAttachmentBatch(
+    inputs,
+    targetTable,
+    targetPeriod,
+    options = {},
+  ) {
     const orderedInputs = [...inputs].sort((left, right) => {
       const leftProfile = api.profileForAttachment(left.category);
       const rightProfile = api.profileForAttachment(right.category);
@@ -150,10 +155,10 @@
         input.sourceName,
         {
           deferMissingTarget: true,
-          excludedTargetRows: api.attachmentExclusionRows(
-            parts,
-            input.category,
-          ),
+          excludedTargetRows: [
+            ...(options.excludedTargetRows || []),
+            ...api.attachmentExclusionRows(parts, input.category),
+          ],
         },
       );
       result.warnings = [

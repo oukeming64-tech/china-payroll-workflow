@@ -22,7 +22,6 @@
   function sheetRegionHeaderRows(sheetRecord, sharedStrings) {
     const cellsByRow = api.rowCellMap(sheetRecord.document);
     return [...cellsByRow.entries()]
-      .filter(([row]) => row <= 100)
       .filter(([, cells]) =>
         isRegionHeader(
           [...cells.values()].map(
@@ -36,7 +35,6 @@
 
   function matrixRegionHeaderRows(matrix) {
     return (Array.isArray(matrix) ? matrix : [])
-      .slice(0, 100)
       .map((values, index) => ({
         row: index + 1,
         values: Array.isArray(values) ? values : [],

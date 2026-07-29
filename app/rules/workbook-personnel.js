@@ -58,6 +58,14 @@
     );
   }
 
+  function isFinalPayProposal(proposal) {
+    return (
+      proposal.kind === "cell-change" &&
+      api.normalizeText(proposal.field?.name) ===
+        api.normalizeText("实发合计")
+    );
+  }
+
   function proposalInputValue(proposal) {
     if (proposal.operation !== "设置") {
       return proposal.inputValue;
@@ -78,6 +86,19 @@
       : proposal.inputValue;
   }
 
+  function proposalSourceAccount(proposals) {
+    for (const proposal of proposals) {
+      const account = valueByAliases(
+        proposal.sourceValues,
+        ACCOUNT_ALIASES,
+      );
+      if (api.asText(account)) {
+        return account;
+      }
+    }
+    return "";
+  }
+
   function validateWorkbookProposalBatch(proposals) {
     const errors = [];
     const selected = proposals.filter(
@@ -92,18 +113,6 @@
       byPerson.get(key).push(proposal);
     }
     for (const [key, items] of byPerson) {
-      if (
-        items.some(isPayImpactingProposal) &&
-        !items.some(
-          (item) =>
-            item.kind === "cell-change" &&
-            api.normalizeText(item.field?.name) === api.normalizeText("实发合计"),
-        )
-      ) {
-        errors.push(
-          `${key} 的工资变动缺少“实发合计”；代发薪金额无法安全同步`,
-        );
-      }
       for (const item of items.filter(
         (proposal) => proposal.kind === "new-person",
       )) {
@@ -179,7 +188,9 @@
         "工资表移出在职名单",
         "工资核对表移出匹配行",
         "代发薪移出匹配行",
-        "离职名单新增待补日期记录",
+        proposal.archiveExisting
+          ? "离职名单沿用已有记录"
+          : "离职名单新增待补日期记录",
       ];
     }
     if (proposal.kind === "new-person") {
@@ -191,10 +202,15 @@
       ];
     }
     if (proposal.kind === "cell-change") {
-      return api.normalizeText(proposal.field?.name) ===
-        api.normalizeText("实发合计")
+      return isFinalPayProposal(proposal)
         ? ["工资表更新", "工资核对表公式联动", "代发薪金额同步"]
-        : ["工资表更新", "工资核对表公式联动"];
+        : isPayImpactingProposal(proposal)
+          ? [
+              "工资表更新",
+              "工资核对表公式联动",
+              "代发薪引用实发公式",
+            ]
+          : ["工资表更新", "工资核对表公式联动"];
     }
     return [];
   }
@@ -205,7 +221,9 @@
     valueByAliases,
     proposalPersonKey,
     isPayImpactingProposal,
+    isFinalPayProposal,
     proposalInputValue,
+    proposalSourceAccount,
     validateWorkbookProposalBatch,
     personIdentity,
     rowValuesByHeader,

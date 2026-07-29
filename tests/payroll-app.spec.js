@@ -37,6 +37,22 @@ const unmatchedRegularAttachments = [
   ),
   regularAttachments[1],
 ];
+const workbookEvidenceWorkbook = path.join(
+  fixtureRoot,
+  "2025.11合成工资表-含分表变动.xlsx",
+);
+const workbookEvidenceAttachments = [
+  path.join(
+    fixtureRoot,
+    "2025.12分表变动附件",
+    "202512_正常工资薪金所得.xls",
+  ),
+  path.join(
+    fixtureRoot,
+    "2025.12分表变动附件",
+    "2025.12示例公司社保公积金表.xlsx",
+  ),
+];
 const januaryAttachments = [
   path.join(
     fixtureRoot,
@@ -58,7 +74,7 @@ const januaryChangeAttachments = [
   "员工动态表",
   "入职转正薪资",
   "实习生津贴表",
-  "考勤表",
+  "行政请假记录",
 ].map((label) =>
   path.join(
     fixtureRoot,
@@ -257,6 +273,12 @@ test("开始页保持简洁，只接收上月完整工资表", async ({ page }) 
   page.on("pageerror", (error) => pageErrors.push(error.message));
   await page.goto("/");
 
+  await expect(page.locator("#appBuildStamp")).toHaveText(
+    "修复版 2026.07.29-3",
+  );
+  await expect(
+    page.locator('script[src*="build=20260729.3"]'),
+  ).toHaveCount(7);
   await expect(
     page.getByRole("heading", { name: "生成下月工资表" }),
   ).toBeVisible();
@@ -347,8 +369,8 @@ test("考勤需求公式覆盖病假三档、事假、产假和工伤停止项",
     const source = rules.tableFromMatrix(
       [
         [
+          "工作部门",
           "身份证号",
-          "姓名",
           "请假信息",
           "",
           "",
@@ -356,46 +378,52 @@ test("考勤需求公式覆盖病假三档、事假、产假和工伤停止项",
           "",
         ],
         ["", "", "", "扣款病假", "事假", "产假", "工伤"],
-        ["ID-1", "甲", "", 4, 1, 0, 0],
-        ["ID-2", "乙", "", 6, 0, 0, 0],
-        ["ID-3", "丙", "", 11, 0, 0, 0],
-        ["ID-4", "丁", "", 0, 0, 1, 0],
-        ["ID-5", "戊", "", 0, 0, 0, 2],
+        ["", "ID-1", "", 4, 1, 0, 0],
+        ["", "ID-2", "", 6, 0, 0, 0],
+        ["", "ID-3", "", 11, 0, 0, 0],
+        ["", "ID-4", "", 0, 0, 1, 0],
+        ["", "ID-5", "", 0, 0, 0, 2],
       ],
-      "2026.06考勤",
+      "2026.06行政请假记录",
     );
     const profile = rules.matchBusinessSource(
       source,
-      "2026年6月考勤表-示例.xlsx",
+      "2026年6月行政请假记录-示例.xlsx",
     );
     const result = rules.proposalsFromBusinessSource(
       source,
       target,
       "2026-06",
-      "2026年6月考勤表-示例.xlsx",
+      "2026年6月行政请假记录-示例.xlsx",
       profile,
     );
-    return result.proposals.map((proposal) => ({
-      status: proposal.status,
-      formula: proposal.formula || "",
-      errors: proposal.errors,
-      warnings: proposal.warnings,
-    }));
+    return {
+      profileId: profile?.id || "",
+      errors: result.errors,
+      proposals: result.proposals.map((proposal) => ({
+        status: proposal.status,
+        formula: proposal.formula || "",
+        errors: proposal.errors,
+        warnings: proposal.warnings,
+      })),
+    };
   });
-  expect(audit).toHaveLength(5);
-  expect(audit[0].formula).toContain("*1%*4");
-  expect(audit[0].formula).toContain("/22*1");
-  expect(audit[0].warnings).toEqual(
+  expect(audit.profileId).toBe("attendance-register");
+  expect(audit.errors).toEqual([]);
+  expect(audit.proposals).toHaveLength(5);
+  expect(audit.proposals[0].formula).toContain("*1%*4");
+  expect(audit.proposals[0].formula).toContain("/22*1");
+  expect(audit.proposals[0].warnings).toEqual(
     expect.arrayContaining([
       expect.stringContaining("不足缴纳社保和公积金"),
     ]),
   );
-  expect(audit[1].formula).toContain("*1.5%*6");
-  expect(audit[2].formula).toContain("/22*50%*11");
-  expect(audit[3].errors).toEqual(
+  expect(audit.proposals[1].formula).toContain("*1.5%*6");
+  expect(audit.proposals[2].formula).toContain("/22*50%*11");
+  expect(audit.proposals[3].errors).toEqual(
     expect.arrayContaining([expect.stringContaining("产假待遇")]),
   );
-  expect(audit[4].errors).toEqual(
+  expect(audit.proposals[4].errors).toEqual(
     expect.arrayContaining([expect.stringContaining("停工留薪期")]),
   );
 });
@@ -413,8 +441,13 @@ test("历史业务附件按已证明字段映射，只有名单没有金额时�
       {
         name: "2025.12实习生津贴.xlsx",
         matrix: [
-          ["姓名", "身份证号", "津贴总额"],
-          ["测试甲", "SYNTHETIC-ID-001", 5100],
+          ["姓名", "身份证号", "津贴总额", "工资卡号"],
+          [
+            "测试甲",
+            "SYNTHETIC-ID-001",
+            5100,
+            "SYNTHETIC-ACCOUNT-001",
+          ],
         ],
       },
       {
@@ -453,6 +486,11 @@ test("历史业务附件按已证明字段映射，只有名单没有金额时�
         fields: result.proposals.map(
           (proposal) => proposal.field?.name || "",
         ),
+        sourceAccountCaptured: result.proposals.some(
+          (proposal) =>
+            proposal.sourceValues?.工资卡号 ===
+            "SYNTHETIC-ACCOUNT-001",
+        ),
         errors: result.errors,
       };
     });
@@ -461,16 +499,19 @@ test("历史业务附件按已证明字段映射，只有名单没有金额时�
     {
       profile: "intern-allowance",
       fields: ["基本工资"],
+      sourceAccountCaptured: true,
       errors: [],
     },
     {
       profile: "confidential-allowance-roster",
       fields: ["BM津贴"],
+      sourceAccountCaptured: false,
       errors: [],
     },
     {
       profile: "confidential-eligibility",
       fields: [],
+      sourceAccountCaptured: false,
       errors: [expect.stringContaining("没有提供可写入工资表的补贴金额")],
     },
   ]);
@@ -719,7 +760,7 @@ test("七份附件全量读取并以身份证严格匹配人员变动", async ({
     page.locator("#requirementCoverageList .diagnostic-card"),
   ).toHaveCount(11);
   await expect(page.locator("#requirementCoverageList")).toContainText(
-    "月内转正必须有转正天数",
+    "转正统一按生效月份1日处理",
   );
   await expect(page.locator("#requirementCoverageList")).toContainText(
     "离职前近12个月工资总额月均",
@@ -735,7 +776,7 @@ test("七份附件全量读取并以身份证严格匹配人员变动", async ({
       buffer: fs.readFileSync(sourcePath),
     })),
     {
-      name: "~$2026年1月考勤表-示例.xlsx",
+      name: "~$2026年1月行政请假记录-示例.xlsx",
       mimeType:
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       buffer: Buffer.from("synthetic temporary lock"),
@@ -775,7 +816,7 @@ test("七份附件全量读取并以身份证严格匹配人员变动", async ({
   });
   expect(intake.files).toBe(7);
   expect(intake.ignoredFiles).toEqual([
-    "~$2026年1月考勤表-示例.xlsx",
+    "~$2026年1月行政请假记录-示例.xlsx",
   ]);
   expect(intake.coreCategories).toEqual([
     "个税工资薪金附件",
@@ -859,9 +900,9 @@ test("七份附件全量读取并以身份证严格匹配人员变动", async ({
     },
   ]);
 
-  const regularizationProration = await page.evaluate(() => {
+  const regularizationFirstDay = await page.evaluate(() => {
     const state = window.PayrollLocal.ui.state;
-    const build = (regularDays) => {
+    const build = (date) => {
       const headers = [
         "身份证号",
         "姓名",
@@ -871,24 +912,18 @@ test("七份附件全量读取并以身份证严格匹配人员变动", async ({
         "绩效工资",
         "合计",
       ];
-      if (regularDays !== null) {
-        headers.push("转正天数");
-      }
       const row = [
         "SYNTHETIC-ID-001",
         "测试甲",
-        "2026-01-02",
+        date,
         2250,
         3750,
         1500,
         7500,
       ];
-      if (regularDays !== null) {
-        row.push(regularDays);
-      }
       const table = window.XlsxEngine.buildTableFromMatrix(
         [headers, row],
-        "转正按天测试",
+        "转正默认1日测试",
       );
       const profile = window.PayrollEngine.matchBusinessSource(
         table,
@@ -902,23 +937,35 @@ test("七份附件全量读取并以身份证严格匹配人员变动", async ({
         profile,
       );
     };
-    const missing = build(null);
-    const complete = build(21);
-    const performance = complete.proposals.find(
+    const explicitMidMonth = build("2026-01-02");
+    const missingDate = build("");
+    const performance = explicitMidMonth.proposals.find(
       (proposal) => proposal.field?.name === "绩效工资标准",
     );
     return {
-      missingError: missing.proposals[0]?.errors[0] || "",
-      completeErrors: complete.errors,
+      explicitErrors: explicitMidMonth.errors,
+      explicitProposalErrors: explicitMidMonth.proposals.flatMap(
+        (proposal) => proposal.errors || [],
+      ),
+      explicitWarnings: explicitMidMonth.warnings,
+      missingDateErrors: missingDate.errors,
+      missingDateProposalErrors: missingDate.proposals.flatMap(
+        (proposal) => proposal.errors || [],
+      ),
       performanceValue: performance?.inputValue,
       performanceFormula: performance?.formula,
     };
   });
-  expect(regularizationProration).toEqual({
-    missingError: expect.stringContaining("缺少“转正天数”"),
-    completeErrors: [],
-    performanceValue: 1431.82,
-    performanceFormula: "ROUND(1500/22*21,2)",
+  expect(regularizationFirstDay).toEqual({
+    explicitErrors: [],
+    explicitProposalErrors: [],
+    explicitWarnings: [
+      expect.stringContaining("统一视为2026-01-01转正"),
+    ],
+    missingDateErrors: [],
+    missingDateProposalErrors: [],
+    performanceValue: 1500,
+    performanceFormula: "",
   });
 
   const employmentEvents = await page.evaluate(() => {
@@ -1079,6 +1126,111 @@ test("七份附件全量读取并以身份证严格匹配人员变动", async ({
     externalFormulas: 0,
   });
   expect(pageErrors).toEqual([]);
+});
+
+test("超过一百份附件仍全量进入身份证匹配批次", async ({ page }) => {
+  await openRegularWorkspace(page);
+  const result = await page.evaluate(() => {
+    const rules = window.PayrollEngine;
+    const target = window.PayrollLocal.ui.state.table;
+    const people = rules
+      .buildPeople(target)
+      .people.filter((person) => person.idCard);
+    const sourceTable = window.XlsxEngine.buildTableFromMatrix(
+      [
+        [
+          "证件号码",
+          "姓名",
+          "累计子女教育",
+          "累计继续教育",
+          "累计住房贷款利息",
+          "累计住房租金",
+          "累计赡养老人",
+          "累计3岁以下婴幼儿照护",
+          "累计个人养老金",
+        ],
+        ...people.map((person, index) => [
+          person.idCard,
+          `不用于匹配的姓名${index + 1}`,
+          100 + index,
+          200 + index,
+          300 + index,
+          400 + index,
+          500 + index,
+          600 + index,
+          700 + index,
+        ]),
+      ],
+      "百份附件身份证测试",
+    );
+    const inputs = Array.from({ length: 105 }, (_, index) => ({
+      category: "个税工资薪金附件",
+      sourceTable,
+      sourceName: `2025年12月个税附件-${index + 1}.xlsx`,
+      warnings: [],
+    }));
+    const batch = rules.resolveAttachmentBatch(
+      inputs,
+      target,
+      "2025-12",
+    );
+    const merged = batch.results[0];
+    const input = document.querySelector("#attachmentFilesInput");
+    return {
+      inputAllowsMultiple: input.multiple,
+      inputMax: input.getAttribute("max"),
+      partCount: batch.parts.length,
+      sourceCount: merged.sourceNames.length,
+      updateCount: batch.updates.length,
+      expectedUpdates: people.length * 7,
+      matchedPeople: merged.matchedPeople,
+      peopleCount: people.length,
+      errors: batch.errors,
+    };
+  });
+  expect(result).toEqual({
+    inputAllowsMultiple: true,
+    inputMax: null,
+    partCount: 105,
+    sourceCount: 105,
+    updateCount: result.expectedUpdates,
+    expectedUpdates: result.expectedUpdates,
+    matchedPeople: result.peopleCount,
+    peopleCount: result.peopleCount,
+    errors: [],
+  });
+});
+
+test("同一工作表第一百行后的业务分区仍会读取", async ({ page }) => {
+  await openRegularWorkspace(page);
+  const result = await page.evaluate(() => {
+    const header = ["身份证号", "姓名", "变动类型"];
+    const matrix = [
+      header,
+      ["SYNTHETIC-ID-001", "第一分区", "转正"],
+      ...Array.from({ length: 102 }, () => []),
+      header,
+      ["SYNTHETIC-ID-002", "第二分区", "离职"],
+    ];
+    const excel = window.PayrollLocal.excel;
+    const headerRows = excel.matrixRegionHeaderRows(matrix);
+    const tables = excel.buildTablesFromMatrix(
+      matrix,
+      "深行分区测试",
+    );
+    return {
+      headerRows,
+      tableHeaderRows: tables.map((table) => table.headerRow),
+      tableRowCounts: tables.map((table) => table.rows.length),
+      secondName: tables[1]?.rows[0]?.get("姓名"),
+    };
+  });
+  expect(result).toEqual({
+    headerRows: [1, 105],
+    tableHeaderRows: [1, 105],
+    tableRowCounts: [1, 1],
+    secondName: "第二分区",
+  });
 });
 
 test("普通月份用目标月附件写入人员字段并生成无外链文件", async ({
@@ -1446,6 +1598,217 @@ test("工资附件缺失或含未匹配人员时停止写入", async ({ page }) 
   ).toBe(false);
 });
 
+test("先读取上月分表的已生效离职，再核对目标月附件", async ({
+  page,
+}) => {
+  await selectBaseWorkbook(page, workbookEvidenceWorkbook);
+  await expect(page.locator("#workspaceView")).toBeVisible();
+
+  const evidence = await page.evaluate(() => {
+    const state = window.PayrollLocal.ui.state;
+    const proposals = state.proposals.filter(
+      (proposal) => proposal.workbookEvidence,
+    );
+    return {
+      sheets: state.personnelSheets.map((sheet) => sheet.name),
+      recognizedRegions:
+        state.workbookEvidence.recognizedRegions.length,
+      departures: state.workbookEvidence.departures.length,
+      proposals: proposals.map((proposal) => ({
+        kind: proposal.kind,
+        source: proposal.source,
+        archiveExisting: proposal.archiveExisting,
+        effectiveDate: proposal.effectiveDate,
+      })),
+    };
+  });
+  expect(evidence.sheets).toEqual([
+    "离职名单",
+    "备忘",
+    "工资表",
+    "工资核对表",
+    "代发薪",
+    "BM津贴",
+  ]);
+  expect(evidence.recognizedRegions).toBeGreaterThanOrEqual(4);
+  expect(evidence.departures).toBe(1);
+  expect(evidence.proposals).toEqual([
+    {
+      kind: "disable-person",
+      source: "上月工资表·离职名单",
+      archiveExisting: true,
+      effectiveDate: "2025-11-30",
+    },
+  ]);
+
+  await page.locator('[data-tab="attachments"]').click();
+  await page
+    .locator("#attachmentFilesInput")
+    .setInputFiles(workbookEvidenceAttachments);
+  await expect(page.locator("#loadingOverlay")).toBeHidden({
+    timeout: 30_000,
+  });
+
+  const beforeApply = await page.evaluate(() => {
+    const errors = window.PayrollLocal.ui.state.attachments.errors;
+    return {
+      errors,
+      hasFalseMissing: errors.some((error) =>
+        error.includes("未在该类附件中出现"),
+      ),
+    };
+  });
+  expect(beforeApply.hasFalseMissing).toBe(false);
+  expect(beforeApply.errors).toEqual([
+    expect.stringContaining("上月工资表分表已有 1 项已生效人员变动"),
+  ]);
+
+  await page.locator('[data-tab="changes"]').click();
+  await page.locator("#applyProposalsBtn").click();
+  await expect(page.locator("#loadingOverlay")).toBeHidden({
+    timeout: 30_000,
+  });
+
+  const afterApply = await page.evaluate(async () => {
+    const state = window.PayrollLocal.ui.state;
+    const main = await state.workbook.getTable("工资表");
+    const archive = await state.workbook.getTable("离职名单");
+    return {
+      errors: state.attachments.errors,
+      unresolved:
+        window.PayrollEngine.unresolvedWorkbookDepartures(
+          state.workbookEvidence,
+          main,
+        ).length,
+      activePeople: window.PayrollEngine
+        .buildPeople(main)
+        .people.map((person) => person.employeeId),
+      archiveRows: archive.rows.filter(
+        (row) => row.get("人员编号") === "TEST-002",
+      ).length,
+    };
+  });
+  expect(afterApply.errors).toEqual([]);
+  expect(afterApply.unresolved).toBe(0);
+  expect(afterApply.activePeople).not.toContain("TEST-002");
+  expect(afterApply.archiveRows).toBe(1);
+  await expect(page.locator("#applyAttachmentsBtn")).toBeEnabled();
+});
+
+test("上月备忘中的目标月转岗和转正按结构化日期进入变动流程", async ({
+  page,
+}) => {
+  await openRegularWorkspace(page);
+  const result = await page.evaluate(() => {
+    const target = window.PayrollLocal.ui.state.table;
+    const transferTable = window.XlsxEngine.buildTableFromMatrix(
+      [
+        [
+          "身份证号",
+          "姓名",
+          "转部门日期",
+          "转岗后部门",
+          "转岗后岗位",
+        ],
+        [
+          "SYNTHETIC-ID-001",
+          "测试甲",
+          "2025-11-01",
+          "历史部门",
+          "历史岗位",
+        ],
+        [
+          "SYNTHETIC-ID-001",
+          "测试甲",
+          "2025-12-01",
+          "目标部门",
+          "目标岗位",
+        ],
+      ],
+      "备忘",
+    );
+    const regularizationTable =
+      window.XlsxEngine.buildTableFromMatrix(
+        [
+          [
+            "身份证号",
+            "姓名",
+            "转正日期",
+            "基本工资",
+            "岗位工资",
+            "绩效工资",
+          ],
+          [
+            "SYNTHETIC-ID-001",
+            "测试甲",
+            "2025-12-15",
+            2250,
+            3750,
+            1500,
+          ],
+        ],
+        "备忘",
+      );
+    const transfer =
+      window.PayrollEngine.structuredWorkbookChangeResults(
+        { name: "备忘" },
+        transferTable,
+        target,
+        "2025-12",
+      );
+    const regularization =
+      window.PayrollEngine.structuredWorkbookChangeResults(
+        { name: "备忘" },
+        regularizationTable,
+        target,
+        "2025-12",
+      );
+    return {
+      transfer: transfer.flatMap((item) =>
+        item.proposals.map((proposal) => ({
+          field: proposal.field?.name,
+          value: proposal.inputValue,
+          matchedBy: proposal.matchedBy,
+        })),
+      ),
+      regularization: regularization.flatMap((item) =>
+        item.proposals.map((proposal) => ({
+          field: proposal.field?.name,
+          value: proposal.inputValue,
+          formula: proposal.formula || "",
+        })),
+      ),
+      regularizationErrors: regularization.flatMap(
+        (item) => item.errors || [],
+      ),
+      regularizationWarnings: regularization.flatMap(
+        (item) => item.warnings || [],
+      ),
+    };
+  });
+  expect(result.transfer).toEqual([
+    {
+      field: "部门",
+      value: "目标部门",
+      matchedBy: "idCard",
+    },
+    {
+      field: "岗位",
+      value: "目标岗位",
+      matchedBy: "idCard",
+    },
+  ]);
+  expect(result.regularization).toEqual([
+    { field: "基本工资", value: 2250, formula: "" },
+    { field: "岗位工资", value: 3750, formula: "" },
+    { field: "绩效工资标准", value: 1500, formula: "" },
+  ]);
+  expect(result.regularizationErrors).toEqual([]);
+  expect(result.regularizationWarnings).toEqual([
+    expect.stringContaining("统一视为2025-12-01转正"),
+  ]);
+});
+
 test("跨年历史不完整时停止生成并显示缺月错误", async ({ page }) => {
   await selectBaseWorkbook(page, annualPayrollWorkbooks[11]);
   await page
@@ -1575,19 +1938,19 @@ test("工资变动同步主表、公式核对表和代发薪，停用同步三�
   expect(disableSync.syncEntries).toBe(4);
 });
 
-test("工资字段变化缺少实发合计时整批停止，不部分写入", async ({
+test("工资字段变化沿用实发公式并同步代发薪，不要求附件重复提供实发合计", async ({
   page,
 }) => {
   await openRegularWorkspace(page);
   await page.locator('[data-tab="changes"]').click();
-  const incomplete = [
+  const formulaDerived = [
     "人员编号,姓名,其他工资",
     "TEST-001,测试甲,999",
   ].join("\n");
   await page.locator("#sourceFilesInput").setInputFiles({
-    name: "缺少实发合计.csv",
+    name: "公式派生工资变动.csv",
     mimeType: "text/csv",
-    buffer: Buffer.from(incomplete),
+    buffer: Buffer.from(formulaDerived),
   });
   await expect(page.locator("#loadingOverlay")).toBeHidden({
     timeout: 30_000,
@@ -1596,19 +1959,41 @@ test("工资字段变化缺少实发合计时整批停止，不部分写入", as
   await expect(page.locator("#loadingOverlay")).toBeHidden({
     timeout: 30_000,
   });
-  await expect(page.locator("#toastRegion .toast").last()).toContainText(
-    "缺少“实发合计”",
-  );
-  await expect(page.locator("#proposalTable tbody tr")).toHaveCount(1);
-  const currentValue = await page.evaluate(() => {
+  await expect(page.locator("#proposalTable tbody tr")).toHaveCount(0);
+  const formulaSync = await page.evaluate(async () => {
+    const state = window.PayrollLocal.ui.state;
+    const main = await state.workbook.getTable("工资表");
     const person = window.PayrollEngine
-      .buildPeople(window.PayrollLocal.ui.state.table)
+      .buildPeople(main)
       .people.find((item) => item.employeeId === "TEST-001");
-    return person.row.get("其他工资");
+    const finalHeader = main.headers.find(
+      (header) => header.name === "实发合计",
+    );
+    const disbursement = await state.workbook.getTable("代发薪");
+    const payRow = disbursement.rows.find(
+      (row) => row.get("人员编号") === "TEST-001",
+    );
+    const amountHeader = disbursement.headers.find(
+      (header) => header.name === "金额(*)",
+    );
+    const amountCell = payRow.cells.get(amountHeader.column);
+    const expectedFormula = `'工资表'!$${window.XlsxEngine.columnNumberToLetters(
+      finalHeader.column,
+    )}$${person.rowNumber}`;
+    return {
+      otherPay: person.row.get("其他工资"),
+      finalPayFormula: person.row.cells.get(finalHeader.column).formula,
+      disbursementFormula: amountCell.formula,
+      expectedFormula,
+    };
   });
-  expect(currentValue).toBeNull();
+  expect(formulaSync).toEqual({
+    otherPay: 999,
+    finalPayFormula: "AU3-AX3",
+    disbursementFormula: formulaSync.expectedFormula,
+    expectedFormula: formulaSync.expectedFormula,
+  });
 
-  await page.locator("#clearProposalsBtn").click();
   await page
     .locator("#changeText")
     .fill(
@@ -1629,6 +2014,135 @@ test("工资字段变化缺少实发合计时整批停止，不部分写入", as
       .people.some((person) => person.employeeId === "TEST-003"),
   );
   expect(newPersonExists).toBe(false);
+});
+
+test("实发合计不是公式时仍阻止未明确金额的工资变动", async ({
+  page,
+}) => {
+  await openRegularWorkspace(page);
+  await page.evaluate(async () => {
+    const state = window.PayrollLocal.ui.state;
+    const person = window.PayrollEngine
+      .buildPeople(state.table)
+      .people.find((item) => item.employeeId === "TEST-001");
+    const finalHeader = state.table.headers.find(
+      (header) => header.name === "实发合计",
+    );
+    await state.workbook.updateCell(
+      "工资表",
+      person.rowNumber,
+      finalHeader.column,
+      person.row.get(finalHeader.name),
+      { preserveFormula: false },
+    );
+    state.table = await state.workbook.getTable("工资表");
+  });
+  await page.locator('[data-tab="changes"]').click();
+  await page.locator("#sourceFilesInput").setInputFiles({
+    name: "无实发公式工资变动.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      ["人员编号,姓名,其他工资", "TEST-001,测试甲,999"].join("\n"),
+    ),
+  });
+  await expect(page.locator("#loadingOverlay")).toBeHidden({
+    timeout: 30_000,
+  });
+  await page.locator("#applyProposalsBtn").click();
+  await expect(page.locator("#loadingOverlay")).toBeHidden({
+    timeout: 30_000,
+  });
+  await expect(page.locator("#toastRegion .toast").last()).toContainText(
+    "不是可重算公式",
+  );
+  await expect(page.locator("#proposalTable tbody tr")).toHaveCount(1);
+});
+
+test("既有人员首次进入工资核对表和代发薪时复用同批离职行", async ({
+  page,
+}) => {
+  await openRegularWorkspace(page);
+  await page.evaluate(async () => {
+    const state = window.PayrollLocal.ui.state;
+    const person = window.PayrollEngine
+      .buildPeople(state.table)
+      .people.find((item) => item.employeeId === "TEST-001");
+    const identity = window.PayrollEngine.personIdentity(person);
+    await state.workbook.clearIdentityAndHideMatches(
+      "工资核对表",
+      identity,
+    );
+    await state.workbook.clearIdentityAndHideMatches("代发薪", identity);
+  });
+  await page.locator('[data-tab="changes"]').click();
+  await page.locator("#changeText").fill("测试乙 停用");
+  await page.locator("#parseTextBtn").click();
+  await page.locator("#sourceFilesInput").setInputFiles({
+    name: "2025.12实习生津贴.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      [
+        "姓名,身份证号,津贴总额,工资卡号",
+        "测试甲,SYNTHETIC-ID-001,5100,SYNTHETIC-ACCOUNT-001",
+      ].join("\n"),
+    ),
+  });
+  await expect(page.locator("#loadingOverlay")).toBeHidden({
+    timeout: 30_000,
+  });
+  await page.locator("#applyProposalsBtn").click();
+  await expect(page.locator("#loadingOverlay")).toBeHidden({
+    timeout: 30_000,
+  });
+  await expect(page.locator("#proposalTable tbody tr")).toHaveCount(0);
+  const recycled = await page.evaluate(async () => {
+    const state = window.PayrollLocal.ui.state;
+    const main = await state.workbook.getTable("工资表");
+    const person = window.PayrollEngine
+      .buildPeople(main)
+      .people.find((item) => item.employeeId === "TEST-001");
+    const identity = window.PayrollEngine.personIdentity(person);
+    const check = await state.workbook.formulaReferencesIdentity(
+      "工资核对表",
+      "工资表",
+      identity,
+    );
+    const pay = await state.workbook.getTable("代发薪");
+    const payMatch = window.PayrollLocal.excel.rowsMatchingIdentity(
+      pay,
+      identity,
+    );
+    const amountHeader = pay.headers.find(
+      (header) => header.name === "金额(*)",
+    );
+    const amountCell =
+      payMatch.rows[0]?.cells.get(amountHeader.column);
+    const finalHeader = main.headers.find(
+      (header) => header.name === "实发合计",
+    );
+    return {
+      checkRows: check.rows.length,
+      checkFormulaCells: check.cells.length,
+      payRows: payMatch.rows.length,
+      account: payMatch.rows[0]?.get("账号(*)") || "",
+      amountFormula: amountCell?.formula || "",
+      expectedFormula: `'工资表'!$${window.XlsxEngine.columnNumberToLetters(
+        finalHeader.column,
+      )}$${person.rowNumber}`,
+      disabledStillActive: window.PayrollEngine
+        .buildPeople(main)
+        .people.some((item) => item.employeeId === "TEST-002"),
+    };
+  });
+  expect(recycled).toEqual({
+    checkRows: 1,
+    checkFormulaCells: 2,
+    payRows: 1,
+    account: "SYNTHETIC-ACCOUNT-001",
+    amountFormula: recycled.expectedFormula,
+    expectedFormula: recycled.expectedFormula,
+    disabledStillActive: false,
+  });
 });
 
 test("长表、宽表和月份冲突规则保持独立", async ({ page }) => {

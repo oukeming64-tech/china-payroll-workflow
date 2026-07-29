@@ -134,6 +134,9 @@
     const identities = identityHeaders(table);
     const people = [];
     for (const row of table.rows) {
+      if (row.hidden) {
+        continue;
+      }
       const employeeId = identities.employeeId
         ? row.get(identities.employeeId.name)
         : "";

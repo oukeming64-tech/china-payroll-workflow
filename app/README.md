@@ -39,6 +39,7 @@ app.js
 - `excel/cumulative.js`：普通月份把上月累计缓存接入“之前月份累计”字段。
 - `excel/personnel.js`：辅助表人员映射、同步、归档和安全停用。
 - `excel/table-regions.js`：识别同一工作表中的转正、转岗、调薪等多个独立表格区段。
+- `excel/payroll-sync.js`：建立工资核对公式、代发薪内部引用和安全的离职行复用。
 - `excel/workbook.js`：工作簿门面和导出。
 - `rules/common.js`：人员、字段、月份、数值和冲突的公共规则。
 - `rules/monthly-routes.js`：普通月份、一月跨年路由与全年历史验证。
@@ -47,11 +48,15 @@ app.js
 - `rules/attachment-resolution.js`：个税、社保/公积金、劳务附件字段与人员规则。
 - `rules/attachment-batch.js`：不限制数量地合并同类附件覆盖、去重并识别冲突。
 - `rules/monthly-change-sources.js`：声明员工动态、入职转正薪资、调薪和考勤分区。
-- `rules/salary-event-proration.js`、`rules/salary-events.js`：转正、调薪工资构成与
-  按天折算门禁。
+- `rules/salary-event-proration.js`、`rules/salary-events.js`：转正统一按生效月
+  1 日采用整月工资，月中调薪继续执行折算口径门禁。
 - `rules/employment-events.js`：入职、离职工资预览和完整资料门禁。
 - `rules/attendance-deductions.js`：病假、事假考勤扣款公式及需人工确认的假别。
 - `rules/labor-fee-review.js`：劳务费金额差异提示与高税档停止规则。
+- `rules/workbook-evidence.js`：遍历上月完整工资表的全部工作表和表区，提取带明确
+  生效日期的离职、转岗、转正和其他业务证据。
+- `rules/workbook-evidence-changes.js`：只把属于目标处理月份的分表证据转换为变动，
+  更早历史记录不重复执行。
 - `rules/workbook-personnel.js`：完整工作簿人员/工资变动预检与同步契约。
 - `rules/natural-language.js`：中文文字变动。
 - `rules/tabular-changes.js`：CSV、长表和宽表变动。
@@ -94,6 +99,8 @@ app.js
 - 必要附件全部通过并确认写入后才允许导出，导出文件必须为零外链；
 - 上月工资表本身是公式和样式骨架，不另设公式模板入口；
 - 初次载入不得把上月工资表转成变动提案；
+- 但必须先遍历上月完整工资表的全部工作表和表区；分表中有明确业务日期的记录按
+  生效月份形成待确认项，确认后的既往离职不再计入目标月在职附件覆盖范围；
 - 人员和工资变动由文字或表格入口接收，表格格式自动识别。
 - 任一用户选择的加密工作簿都会弹出密码框；不同文件可使用不同密码，取消后不导入。
 - 同批附件中只有一个文件加密时，输入正确密码后保留整批已读取结果；“已读取”和
@@ -103,6 +110,9 @@ app.js
 - 人员 / 工资变动入口支持已证明格式的业务 Excel 和 Word；只有人员名单、没有金额
   时明确停止，不推算工资或补贴。
 - 目标月份附件一次选择多少份就读取多少份；有身份证的变动来源严格按身份证匹配。
+- 转正统一按生效月份 1 日处理；工作部门可空，请假信息按具体假别和天数进入扣款规则。
+- 已有人员工资或考勤变动保留主表`实发合计`公式，`代发薪`金额内部引用该结果；
+  公式、核对行、身份或银行账号不能证明时整批停止。
 - 劳务费与当前草案金额不同只显示中性复核提醒，不阻断写入；应纳税所得额超过
   20000 元且税档公式未证明时仍停止。
 

@@ -6,7 +6,7 @@
   const ATTACHMENT_PROFILES = Object.freeze({
     "个税工资薪金附件": Object.freeze({
       id: "tax-salary",
-      matchBy: Object.freeze(["idCard", "employeeId", "name"]),
+      matchBy: Object.freeze(["idCard"]),
       sourceIdentity: Object.freeze(["证件号码"]),
       mappings: Object.freeze([
         ["累计子女教育", "累计子女教育"],
@@ -21,7 +21,7 @@
     }),
     "社保 / 公积金附件": Object.freeze({
       id: "social-insurance",
-      matchBy: Object.freeze(["idCard", "name"]),
+      matchBy: Object.freeze(["idCard"]),
       sourceIdentity: Object.freeze(["身份证号"]),
       mappings: Object.freeze([
         ["养老个人", "代扣养老保险"],
@@ -35,8 +35,13 @@
     }),
     "劳务费附件": Object.freeze({
       id: "labor-fee",
-      matchBy: Object.freeze(["name"]),
-      sourceIdentity: Object.freeze(["姓名"]),
+      matchBy: Object.freeze(["idCard", "name"]),
+      sourceIdentity: Object.freeze([
+        "身份证号",
+        "身份证",
+        "证件号码",
+        "姓名",
+      ]),
       mappings: Object.freeze([["增值税税额", "扣减税额"]]),
       excludesFrom: Object.freeze([
         "个税工资薪金附件",
@@ -266,7 +271,10 @@
         continue;
       }
       sourceKeys.add(key);
-      const match = api.matchPerson(targetIndex, identity);
+      const match = api.matchPerson(targetIndex, identity, {
+        matchBy: profile.matchBy,
+        stopAfterPresent: true,
+      });
       if (match.status !== "matched") {
         unmatchedSource += 1;
         continue;
@@ -300,6 +308,8 @@
           targetColumn: mapping.targetHeader.column,
           targetField: mapping.targetField,
           value,
+          changed: !sameValue(currentValue, value),
+          formulaValue: Boolean(sourceCell?.hasFormula),
           matchedBy: match.matchedBy,
           basis: mapping.basis,
         });
@@ -318,12 +328,19 @@
     if (unmatchedSource) {
       errors.push(`来源表有 ${unmatchedSource} 人未匹配工资表`);
     }
-    if (missingTarget) {
+    if (missingTarget && !options.deferMissingTarget) {
       errors.push(`工资表有 ${missingTarget} 人未在该来源表中出现`);
     }
     if (invalidValues) {
       errors.push(`来源表有 ${invalidValues} 个公式缓存或错误值不可用`);
     }
+    const laborAudit = api.auditLaborFeeAmounts(
+      category,
+      sourceTable,
+      targetTable,
+      profile,
+    );
+    errors.push(...laborAudit.errors);
     if (!updates.length) {
       errors.push("来源表没有形成可写入的人员字段");
     }
@@ -341,11 +358,18 @@
           : matchedExpectedPeople,
       sourceMatchedPeople: matchedRows.size,
       matchedTargetRows: [...matchedRows],
+      expectedTargetRows: [...expectedRows],
       expectedPeople:
         category === "劳务费附件" && !expectedRows.size
           ? matchedRows.size
           : expectedRows.size,
       errors: [...new Set(errors)],
+      warnings: [
+        ...(category === "劳务费附件" && !sourceIdentities.idCard
+          ? ["劳务费附件没有身份证号，按已验证的姓名规则匹配"]
+          : []),
+        ...laborAudit.warnings,
+      ],
       basis: profile.basis,
       excludesFrom: [...(profile.excludesFrom || [])],
     };

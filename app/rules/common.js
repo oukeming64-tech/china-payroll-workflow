@@ -182,8 +182,9 @@
     return { people, identities, maps };
   }
 
-  function matchPerson(index, identity = {}) {
-    for (const kind of ["employeeId", "idCard", "name"]) {
+  function matchPerson(index, identity = {}, options = {}) {
+    const matchBy = options.matchBy || ["employeeId", "idCard", "name"];
+    for (const kind of matchBy) {
       const key = normalizeText(identity[kind]);
       if (!key) {
         continue;
@@ -199,6 +200,11 @@
           candidates,
           message: `${kind === "name" ? "姓名" : "人员标识"}存在重名或重复`,
         };
+      }
+      if (options.stopAfterPresent) {
+        const label = { idCard: "身份证号", employeeId: "人员编号", name: "姓名" }[kind];
+        return { status: "unmatched", matchedBy: kind, message:
+          `${label}未匹配到人员，已禁止改用其他字段兜底` };
       }
     }
     return { status: "unmatched", message: "未匹配到人员" };
@@ -280,7 +286,27 @@
     return operation === "增加" ? current + delta : current - delta;
   }
 
+  function sameValue(left, right) {
+    const leftNumber = asNumber(left);
+    const rightNumber = asNumber(right);
+    if (leftNumber !== null && rightNumber !== null)
+      return Math.abs(leftNumber - rightNumber) < 0.001;
+    return normalizeText(left) === normalizeText(right);
+  }
+
   function markConflicts(proposals) {
+    const conflictMessage = "同一人员同一字段出现多项不同变动，请删除冲突后再确认";
+    const duplicateMessage = "与同批其他附件的值相同，已合并为一项";
+    for (const proposal of proposals) {
+      proposal.errors = (proposal.errors || []).filter((error) =>
+        error !== conflictMessage);
+      proposal.warnings = (proposal.warnings || []).filter((warning) =>
+        warning !== duplicateMessage);
+      proposal.redundant = false;
+      if (proposal.status === "error" && !proposal.errors.length) {
+        proposal.status = "ready";
+      }
+    }
     const groups = new Map();
     for (const proposal of proposals) {
       if (
@@ -301,10 +327,21 @@
       if (items.length <= 1) {
         continue;
       }
+      const identical =
+        items.every((item) => item.operation === "设置") &&
+        items.every((item) => sameValue(item.inputValue, items[0].inputValue));
+      if (identical) {
+        items.slice(1).forEach((item) => {
+          item.selected = false;
+          item.redundant = true;
+          item.warnings.push(duplicateMessage);
+        });
+        continue;
+      }
       for (const item of items) {
         item.status = "error";
         item.selected = false;
-        item.errors.push("同一人员同一字段出现多项变动，请删除冲突后再确认");
+        item.errors.push(conflictMessage);
       }
     }
     return proposals;
@@ -351,6 +388,7 @@
     periodInText,
     proposalBase,
     computeOperation,
+    sameValue,
     markConflicts,
     classifySource,
     maskName,

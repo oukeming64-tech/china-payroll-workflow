@@ -123,6 +123,7 @@
         this.sheets.map((sheet) => [sheet.name, sheet]),
       );
       this.tableCache = new Map();
+      this.tableRegionsCache = new Map();
     }
 
     async getTable(sheetName) {
@@ -139,6 +140,22 @@
       });
       this.tableCache.set(sheetName, table);
       return table;
+    }
+
+    async getTables(sheetName) {
+      if (!this.sheetByName.has(sheetName)) {
+        throw new Error(`找不到工作表：${sheetName}`);
+      }
+      if (this.tableRegionsCache.has(sheetName)) {
+        return this.tableRegionsCache.get(sheetName);
+      }
+      const worksheet = this.workbook.Sheets[sheetName];
+      const matrix = legacyMatrix(worksheet);
+      const tables = api.buildTablesFromMatrix(matrix, sheetName, {
+        metadata: legacyMetadata(worksheet, matrix),
+      });
+      this.tableRegionsCache.set(sheetName, tables);
+      return tables;
     }
 
     async scoreSheetsAgainst(targetHeaders = []) {

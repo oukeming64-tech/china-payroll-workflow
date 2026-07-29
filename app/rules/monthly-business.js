@@ -27,6 +27,84 @@
     ]),
     pendingPolicy: "所需资料未逐项确认时停止生成",
   });
+  const PAYROLL_REQUIREMENT_COVERAGE = Object.freeze([
+    Object.freeze({
+      id: "staff-events",
+      label: "1. 入职、转正、离职、转岗和调薪",
+      mode: "source",
+      detail:
+        "员工动态和入职转正薪资表按身份证、日期和分区读取。月内转正必须有转正天数；试用工资与转正工资80%不同时还需试用天数。离职工资与未发绩效必须有当月明确金额。",
+    }),
+    Object.freeze({
+      id: "salary-composition",
+      label: "2. 工资构成与季度绩效",
+      mode: "source",
+      detail:
+        "基本30%、岗位50%、绩效20%会校验；绩效当月不发，季度发放月必须使用人力绩效汇总和系数，不从历史金额推算。",
+    }),
+    Object.freeze({
+      id: "attendance",
+      label: "3. 考勤扣款",
+      mode: "automatic",
+      detail:
+        "病假三档和事假按需求公式写入考勤扣款；年婚丧陪产假正常发放。整月病假、工伤、产假缺当地规则时停止；事假后社保不足需人工确认补交。",
+    }),
+    Object.freeze({
+      id: "special-deductions",
+      label: "4. 专项附加扣除",
+      mode: "source",
+      detail:
+        "只接受税局增减员后重新下载的目标月份数据，按身份证写入累计专项附加字段。",
+    }),
+    Object.freeze({
+      id: "intern-labor",
+      label: "5. 实习生津贴与劳务费",
+      mode: "source",
+      detail:
+        "使用人力提供的具体金额；实习生津贴按身份证。劳务费与当前草案金额不同时提示复核，但临时劳务费或本月新增属于正常月度变动，不阻断写入。",
+    }),
+    Object.freeze({
+      id: "income-tax",
+      label: "6. 个税",
+      mode: "source",
+      detail:
+        "正式员工和实习生沿用已验证七级累计预扣公式；专项扣除和劳务增值税来自目标月附件。劳务应纳税所得额超过20000元时必须复核30%/40%档。",
+    }),
+    Object.freeze({
+      id: "confidential-allowance",
+      label: "7. 保密补贴",
+      mode: "manual",
+      detail:
+        "每季末依据质保部邮件或金额审批表核对；只有人员范围、没有金额时不写入。",
+    }),
+    Object.freeze({
+      id: "sales-commission",
+      label: "8. 销售提成",
+      mode: "manual",
+      detail: "依据当月邮件金额录入；没有提成也要明确确认。",
+    }),
+    Object.freeze({
+      id: "monthly-insurance",
+      label: "9. 每月社保明细",
+      mode: "source",
+      detail:
+        "目标月份人力社保明细按身份证写入个人和公司承担字段；加密文件需输入密码后才能核对。",
+    }),
+    Object.freeze({
+      id: "annual-social-base",
+      label: "10. 年度社保基数",
+      mode: "manual",
+      detail:
+        "按上年度工资总额月均形成候选；各地时间、上下限、取整及不足12个月处理仍以人力确认和最终附件为准。",
+    }),
+    Object.freeze({
+      id: "severance",
+      label: "11. 离职补偿金",
+      mode: "manual",
+      detail:
+        "需要离职前近12个月工资总额月均及明确补偿口径；资料不足时不自动计算，也不把停用人员直接当作补偿金额。",
+    }),
+  ]);
 
   function periodMonth(period) {
     return api.periodParts(period)?.month || 0;
@@ -95,7 +173,7 @@
         "hr-changes",
         "人员与工资变动",
         "人力员工动态及当月金额",
-        "核对入离职、转正、实习或劳务、工资调整、离职结算和其他一次性工资；无变动也需确认。",
+        "按身份证核对入离职日期、转正、转岗、调薪、实习或劳务、离职未发绩效和其他一次性工资；月内转正缺工作天数、离职补偿缺近12个月口径时必须停止。无变动也需确认。",
         [
           "岗位",
           "部门",
@@ -173,6 +251,7 @@
     CONFIDENTIAL_REVIEW_MONTHS,
     MONTHLY_RESET_FIELDS,
     MONTHLY_BUSINESS_RULE_META,
+    PAYROLL_REQUIREMENT_COVERAGE,
     isPerformancePayoutMonth,
     isConfidentialReviewMonth,
     monthlyBusinessPlan,

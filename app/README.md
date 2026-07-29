@@ -38,12 +38,20 @@ app.js
 - `excel/schema.js`：经工作簿证明的列插入、公式引用迁移和跨年字段升级。
 - `excel/cumulative.js`：普通月份把上月累计缓存接入“之前月份累计”字段。
 - `excel/personnel.js`：辅助表人员映射、同步、归档和安全停用。
+- `excel/table-regions.js`：识别同一工作表中的转正、转岗、调薪等多个独立表格区段。
 - `excel/workbook.js`：工作簿门面和导出。
 - `rules/common.js`：人员、字段、月份、数值和冲突的公共规则。
 - `rules/monthly-routes.js`：普通月份、一月跨年路由与全年历史验证。
 - `rules/monthly-business.js`：一次性字段重置、季度绩效与保密补贴复核门禁。
 - `rules/january-rollover.js`：一月 schema、累计重置和年度来源版本。
 - `rules/attachment-resolution.js`：个税、社保/公积金、劳务附件字段与人员规则。
+- `rules/attachment-batch.js`：不限制数量地合并同类附件覆盖、去重并识别冲突。
+- `rules/monthly-change-sources.js`：声明员工动态、入职转正薪资、调薪和考勤分区。
+- `rules/salary-event-proration.js`、`rules/salary-events.js`：转正、调薪工资构成与
+  按天折算门禁。
+- `rules/employment-events.js`：入职、离职工资预览和完整资料门禁。
+- `rules/attendance-deductions.js`：病假、事假考勤扣款公式及需人工确认的假别。
+- `rules/labor-fee-review.js`：劳务费金额差异提示与高税档停止规则。
 - `rules/workbook-personnel.js`：完整工作簿人员/工资变动预检与同步契约。
 - `rules/natural-language.js`：中文文字变动。
 - `rules/tabular-changes.js`：CSV、长表和宽表变动。
@@ -58,6 +66,8 @@ app.js
 - `ui/render.js`：只负责渲染。
 - `ui/personnel-sync-flow.js`：人员/工资变动在 6 表工作簿中的事务式应用。
 - `ui/attachment-flow.js`：附件预览、事务式写入、回滚和零外链复检。
+- `ui/source-regions-flow.js`：编排同一来源文件中的多个表格区段。
+- `ui/requirements-render.js`：展示《工资表需求》11 项覆盖与人工边界。
 - `ui/*-flow.js`：按业务流程编排，不复制底层规则。
 - `xlsx-engine.js`、`payroll-engine.js`：兼容薄入口。
 - `app.js`：启动和事件绑定。
@@ -92,6 +102,9 @@ app.js
   是否变化判断。
 - 人员 / 工资变动入口支持已证明格式的业务 Excel 和 Word；只有人员名单、没有金额
   时明确停止，不推算工资或补贴。
+- 目标月份附件一次选择多少份就读取多少份；有身份证的变动来源严格按身份证匹配。
+- 劳务费与当前草案金额不同只显示中性复核提醒，不阻断写入；应纳税所得额超过
+  20000 元且税档公式未证明时仍停止。
 
 ## 通用发布
 

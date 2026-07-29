@@ -582,7 +582,7 @@ function sourceIndices(month) {
     : { history: 1, tax: 2, insurance: 3, auxiliary: 4 };
 }
 
-function auxiliarySheets(indices) {
+function auxiliarySheets(indices, options = {}) {
   const identities = [
     {
       人员编号: "TEST-001",
@@ -599,25 +599,67 @@ function auxiliarySheets(indices) {
       岗位: "测试岗位",
     },
   ];
+  const archiveRows = [
+    {
+      人员编号: "ARCHIVED-TEST",
+      身份证: "SYNTHETIC-ARCHIVE-ID",
+      姓名: "历史测试",
+      部门: "测试部门",
+      岗位: "历史岗位",
+      入职日期: "2020-01-01",
+      离职日期: "2024-12-31",
+      备注: "合成夹具历史行",
+    },
+  ];
+  const memoRows = identities.map((identity) => ({ ...identity }));
+  if (options.effectiveDeparture) {
+    const departure = {
+      人员编号: "TEST-002",
+      身份证: "SYNTHETIC-ID-002",
+      姓名: "测试乙",
+      部门: "测试部门",
+      岗位: "测试岗位",
+      入职日期: "2021-02-01",
+      离职日期: options.effectiveDeparture,
+      备注: "次月起转回合成总部",
+    };
+    archiveRows.push(departure);
+    Object.assign(
+      memoRows.find((row) => row.人员编号 === "TEST-002"),
+      {
+        离职日期: options.effectiveDeparture,
+        备注: "分表已有明确离职记录",
+      },
+    );
+  }
   return {
     离职名单: simpleSheet(
       "离职名单",
-      ["人员编号", "身份证", "姓名", "部门", "岗位", "备注"],
       [
-        {
-          人员编号: "ARCHIVED-TEST",
-          身份证: "SYNTHETIC-ARCHIVE-ID",
-          姓名: "历史测试",
-          部门: "测试部门",
-          岗位: "历史岗位",
-          备注: "合成夹具历史行",
-        },
+        "人员编号",
+        "身份证",
+        "姓名",
+        "部门",
+        "岗位",
+        "入职日期",
+        "离职日期",
+        "备注",
       ],
+      archiveRows,
     ),
     备忘: simpleSheet(
       "备忘",
-      ["人员编号", "身份证", "姓名", "部门", "岗位", "入司时间", "备注"],
-      identities,
+      [
+        "人员编号",
+        "身份证",
+        "姓名",
+        "部门",
+        "岗位",
+        "入司时间",
+        "离职日期",
+        "备注",
+      ],
+      memoRows,
     ),
     工资核对表: simpleSheet(
       "工资核对表",
@@ -661,11 +703,11 @@ function auxiliarySheets(indices) {
   };
 }
 
-async function buildWorkbook(year, month, destination) {
+async function buildWorkbook(year, month, destination, options = {}) {
   const zip = new JSZip();
   const external = externalDefinitions(year, month);
   const indices = sourceIndices(month);
-  const auxiliary = auxiliarySheets(indices);
+  const auxiliary = auxiliarySheets(indices, options);
 
   zip.file("[Content_Types].xml", contentTypesXml(external.length));
   zip.file("_rels/.rels", rootRelationshipsXml);
@@ -731,8 +773,14 @@ async function writeSourceWorkbook(
   await fs.writeFile(destination, bytes);
 }
 
-async function buildAttachments(year, month, destination) {
+async function buildAttachments(
+  year,
+  month,
+  destination,
+  options = {},
+) {
   const padded = String(month).padStart(2, "0");
+  const attachmentPeople = options.people || syntheticPeople;
   await fs.mkdir(destination, { recursive: true });
   const taxHeaders = [
     "工号",
@@ -765,7 +813,7 @@ async function buildAttachments(year, month, destination) {
     "已缴税额",
     "备注",
   ];
-  const taxRows = syntheticPeople.map((person, index) => [
+  const taxRows = attachmentPeople.map((person, index) => [
     person.employeeId,
     person.name,
     "居民身份证",
@@ -854,7 +902,7 @@ async function buildAttachments(year, month, destination) {
     "个人合计",
     "公司合计",
   ];
-  const insuranceRows = syntheticPeople.map((person, index) => {
+  const insuranceRows = attachmentPeople.map((person, index) => {
     const pension = 100 + index;
     const unemployment = 10 + index;
     const medical = 20 + index;
@@ -913,6 +961,9 @@ async function buildAttachments(year, month, destination) {
       ],
       "xlsx",
     );
+  }
+
+  if (year >= 2026) {
     await writeSourceWorkbook(
       path.join(
         destination,
@@ -1079,12 +1130,61 @@ async function buildAttachments(year, month, destination) {
     await writeSourceWorkbook(
       path.join(
         destination,
-        `${year}年${month}月考勤表-示例.xlsx`,
+        `${year}年${month}月行政请假记录-示例.xlsx`,
       ),
       "示例",
       [
-        ["序号", "工作部门", "身份证号", "姓名", "请假信息"],
-        [1, "测试部门", "SYNTHETIC-ID-001", "测试甲", "无"],
+        [
+          "序号",
+          "工作部门",
+          "身份证号",
+          "姓名",
+          "请假信息",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+          "",
+        ],
+        [
+          "",
+          "",
+          "",
+          "",
+          "年假",
+          "婚假",
+          "丧假",
+          "带薪病假",
+          "产检",
+          "陪产假",
+          "扣款病假",
+          "产假",
+          "事假",
+          "无薪休息",
+          "备注",
+        ],
+        [
+          1,
+          "",
+          "SYNTHETIC-ID-001",
+          "测试甲",
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          "",
+        ],
       ],
       "xlsx",
     );
@@ -1115,6 +1215,18 @@ await buildAttachments(
   2026,
   1,
   path.join(outputRoot, "2026.01工资附件"),
+);
+await buildWorkbook(
+  2025,
+  11,
+  path.join(outputRoot, "2025.11合成工资表-含分表变动.xlsx"),
+  { effectiveDeparture: "2025-11-30" },
+);
+await buildAttachments(
+  2025,
+  12,
+  path.join(outputRoot, "2025.12分表变动附件"),
+  { people: syntheticPeople.slice(0, 1) },
 );
 
 console.log(`已生成 ${outputRoot} 下的无个人信息合成工资表夹具`);

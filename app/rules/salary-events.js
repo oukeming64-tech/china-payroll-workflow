@@ -22,7 +22,7 @@
     id: "salary-events",
     trigger: "目标月份入职转正薪资表包含转正或调薪分区",
     policy:
-      "按身份证匹配；工资构成必须符合基本30%、岗位50%、绩效20%。月内转正必须提供转正天数以按天计算绩效；试用工资与转正工资80%不同时还要提供试用天数。月中调薪没有确认折算规则时停止。",
+      "按身份证匹配；工资构成必须符合基本30%、岗位50%、绩效20%。转正统一按生效月份1日处理并使用整月转正工资，不要求转正或试用天数；月中调薪没有确认折算规则时停止。",
   });
   function sourceHeader(table, aliases) {
     return api.headerForAliases(table, aliases);
@@ -140,74 +140,6 @@
     }
     return "";
   }
-  function applyPerformanceProration(components, timing) {
-    if (timing.regularDays === undefined) {
-      return;
-    }
-    const performance = components.values.find(
-      (component) => component.target === "绩效工资标准",
-    );
-    if (!performance) {
-      return;
-    }
-    performance.fullValue = performance.value;
-    performance.value =
-      Math.round(
-        ((performance.fullValue / 22) * timing.regularDays +
-          Number.EPSILON) *
-          100,
-      ) / 100;
-    performance.formula =
-      `ROUND(${performance.fullValue}/22*${timing.regularDays},2)`;
-  }
-  function cashAdjustmentProposal(
-    sourceName,
-    sourceRow,
-    targetPeriod,
-    targetTable,
-    match,
-    timing,
-  ) {
-    if (!timing.cashAdjustment) {
-      return null;
-    }
-    const field = api.targetHeader(targetTable, "其他工资");
-    const mapping = {
-      sourceField: "试用天数、转正天数",
-      targetField: "其他工资",
-      targetHeader: field,
-      basis: api.SALARY_EVENT_PRORATION_META.policy,
-    };
-    if (!field) {
-      return errorProposal(
-        sourceName,
-        sourceRow,
-        targetPeriod,
-        mapping,
-        "工资表缺少“其他工资”，不能承接转正当月折算差额",
-        match,
-      );
-    }
-    const proposal = api.proposalBase(
-      sourceName,
-      sourceRow.rowNumber,
-      "",
-    );
-    Object.assign(proposal, {
-      kind: "cell-change",
-      operation: "设置",
-      period: targetPeriod,
-      field,
-      inputValue: timing.cashAdjustment,
-      formula: timing.cashFormula,
-      currentValue: match.person.row.get(field.name),
-      person: match.person,
-      matchedBy: match.matchedBy,
-      mapping,
-      sourceKind: "regularization-proration",
-    });
-    return proposal;
-  }
   function proposalsFromSalaryEventSource(
     sourceTable,
     targetTable,
@@ -308,10 +240,12 @@
         );
         continue;
       }
-      applyPerformanceProration(components, timing);
-      if (timing.regularDays !== undefined) {
+      if (
+        profile.eventKind === "regularization" &&
+        timing.defaultedRegularizationDay
+      ) {
         warnings.push(
-          `第 ${sourceRow.rowNumber} 行转正绩效按“20%绩效标准÷22×${timing.regularDays}天”计算`,
+          `第 ${sourceRow.rowNumber} 行按已确认规则统一视为${timing.period}-01转正，未要求转正或试用天数，也未做月中折算`,
         );
       }
       for (const [index, component] of components.values.entries()) {
@@ -354,17 +288,6 @@
           }
         }
         proposals.push(proposal);
-      }
-      const adjustment = cashAdjustmentProposal(
-        sourceName,
-        sourceRow,
-        targetPeriod,
-        targetTable,
-        match,
-        timing,
-      );
-      if (adjustment) {
-        proposals.push(adjustment);
       }
     }
     if (unmatchedPeople) {

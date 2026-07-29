@@ -159,6 +159,41 @@
         `有 ${pending.length} 项人员 / 工资变动待确认，请先处理后再写入工资附件`,
       );
     }
+    const workbookDepartures =
+      rules.unresolvedWorkbookDepartures(
+        ui.state.workbookEvidence,
+        ui.state.table,
+      );
+    if (workbookDepartures.length) {
+      errors.push(
+        `上月工资表分表已有 ${workbookDepartures.length} 项已生效人员变动，请先在“人员 / 工资变动”中确认`,
+      );
+    }
+    const pendingWorkbookChanges = ui.state.proposals.filter(
+      (proposal) =>
+        proposal.workbookEvidence &&
+        !proposal.archiveExisting &&
+        proposal.status !== "error" &&
+        !proposal.redundant,
+    );
+    if (pendingWorkbookChanges.length) {
+      errors.push(
+        `上月工资表分表另有 ${pendingWorkbookChanges.length} 项目标月业务变动待确认`,
+      );
+    }
+    errors.push(
+      ...ui.state.proposals
+        .filter(
+          (proposal) =>
+            proposal.workbookEvidence &&
+            proposal.status === "error",
+        )
+        .flatMap((proposal) =>
+          (proposal.errors || []).map(
+            (error) => `${proposal.source}：${error}`,
+          ),
+        ),
+    );
     return { errors, pending };
   }
 
@@ -168,6 +203,13 @@
       audit.inputs || [],
       ui.state.table,
       ui.state.targetPeriod,
+      {
+        excludedTargetRows:
+          rules.workbookEvidenceExcludedRows(
+            ui.state.workbookEvidence,
+            ui.state.table,
+          ),
+      },
     );
     const categoryOrder = new Map(
       audit.required.map((item, index) => [item.category, index]),

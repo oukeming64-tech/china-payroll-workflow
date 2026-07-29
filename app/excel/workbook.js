@@ -213,8 +213,8 @@
       );
     }
 
-    async findMonthMarkers(period) {
-      return api.findMonthMarkers(this, period);
+    async findMonthMarkers(period, sheetNames = []) {
+      return api.findMonthMarkers(this, period, sheetNames);
     }
 
     async findPeriodCandidates(sheetNames = []) {
@@ -331,13 +331,43 @@
       return api.findReservedBlankRows(this, sheetName, table);
     }
 
-    async cloneEmployeeRow(sheetName, sourceRowNumber, targetRowNumber) {
+    async cloneEmployeeRow(
+      sheetName,
+      sourceRowNumber,
+      targetRowNumber,
+      options = {},
+    ) {
       return api.cloneEmployeeRow(
         this,
         sheetName,
         sourceRowNumber,
         targetRowNumber,
+        options,
       );
+    }
+
+    async matchingPersonnelRows(sheetName, identity) {
+      return api.matchingPersonnelRows(this, sheetName, identity);
+    }
+
+    async findPersonnelTemplateRow(sheetName, options = {}) {
+      return api.findPersonnelTemplateRow(
+        this,
+        sheetName,
+        options,
+      );
+    }
+
+    async recyclePayrollCheckRow(options) {
+      return api.recyclePayrollCheckRow(this, options);
+    }
+
+    async linkDisbursementAmount(options) {
+      return api.linkDisbursementAmount(this, options);
+    }
+
+    async recycleDisbursementRow(options) {
+      return api.recycleDisbursementRow(this, options);
     }
 
     async setRowHidden(sheetName, rowNumber, hidden = true) {

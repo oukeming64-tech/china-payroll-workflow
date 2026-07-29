@@ -79,21 +79,37 @@
     return [...periods];
   }
 
-  async function findMonthMarkers(workbook, period) {
+  async function findMonthMarkers(
+    workbook,
+    period,
+    sheetNames = [],
+  ) {
     const matchers = periodMatchers(period);
     if (!matchers.length) {
       return [];
     }
+    const requestedNames = Array.isArray(sheetNames)
+      ? sheetNames
+      : [sheetNames];
+    const selectedNames = requestedNames.filter(Boolean);
+    const sheets = selectedNames.length
+      ? selectedNames
+          .map((name) => workbook.sheetByName.get(name))
+          .filter(Boolean)
+      : workbook.sheets;
     const markers = [];
-    for (const sheet of workbook.sheets) {
+    for (const sheet of sheets) {
       const sheetRecord = await workbook.loadSheetRecord(sheet.name);
       for (const cell of api.elementsByLocalName(sheetRecord.document, "c")) {
         const parsed = api.parseCellReference(cell.getAttribute("r"));
-        if (!parsed || parsed.row > 10) {
+        if (!parsed || parsed.row > 3) {
           continue;
         }
         const descriptor = api.cellDescriptor(cell, workbook.sharedStrings);
-        if (typeof descriptor.value !== "string") {
+        if (
+          typeof descriptor.value !== "string" ||
+          !/工资|薪酬|薪资/.test(descriptor.value)
+        ) {
           continue;
         }
         if (

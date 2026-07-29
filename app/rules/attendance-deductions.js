@@ -37,6 +37,17 @@
     );
   }
 
+  function isAttendanceSourceTable(table) {
+    const identities = api.identityHeaders(table);
+    if (!identities.idCard) {
+      return false;
+    }
+    return Boolean(
+      sourceHeader(table, "请假信息") ||
+        LEAVE_FIELDS.some((name) => sourceHeader(table, name)),
+    );
+  }
+
   function roundMoney(value) {
     return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
   }
@@ -363,6 +374,7 @@
 
   Object.assign(api, {
     ATTENDANCE_DEDUCTION_RULE_META,
+    isAttendanceSourceTable,
     proposalsFromAttendanceSource,
   });
 })();

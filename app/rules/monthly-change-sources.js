@@ -144,7 +144,7 @@
       mappings: Object.freeze([]),
       matchBy: Object.freeze(["idCard"]),
       reviewOnly:
-        "已按身份证核对转正人员与日期；工资构成和当月折算以同月入职转正薪资表为准。",
+        "已按身份证核对转正人员与月份；转正统一按该月1日生效，工资构成以同月入职转正薪资表为准，不做月中折算。",
       requirePeriod: true,
     }),
     Object.freeze({
@@ -168,9 +168,8 @@
       filenameAny: Object.freeze(["考勤表"]),
       requiredHeaders: Object.freeze([
         Object.freeze(["身份证号", "身份证", "证件号码"]),
-        Object.freeze(["姓名"]),
-        Object.freeze(["请假信息"]),
       ]),
+      structureMatch: "attendance",
       mappings: Object.freeze([]),
       matchBy: Object.freeze(["idCard"]),
       adapter: "attendance-deductions",
@@ -182,7 +181,7 @@
     id: "monthly-change-source-adapters",
     trigger: "选择目标月份全量工资附件",
     policy:
-      "附件有身份证字段时只按身份证唯一匹配；同一工作表的转正、转岗、调薪分区分别读取；工资构成按30%/50%/20%核对，考勤按需求公式扣款，缺少折算天数时停止",
+      "附件数量不限；有身份证字段时只按身份证唯一匹配；同一工作表的全部转正、转岗、调薪分区分别读取；工资构成按30%/50%/20%核对，考勤按需求公式扣款；转正统一按生效月份1日使用整月工资，月中调薪缺少折算口径时停止",
     profiles: Object.freeze(
       MONTHLY_CHANGE_SOURCE_PROFILES.map((profile) => profile.id),
     ),

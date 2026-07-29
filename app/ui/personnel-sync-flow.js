@@ -4,6 +4,106 @@
   const ui = window.PayrollLocal.ui;
   const rules = window.PayrollEngine;
 
+  function finalPayEvidence(table, person) {
+    const header = rules.targetHeader(table, "实发合计");
+    const cell = header ? person?.row?.cells.get(header.column) : null;
+    return {
+      header,
+      cell,
+      formula: cell?.formula || "",
+      cachedValue: header ? person?.row?.get(header.name) : null,
+    };
+  }
+
+  async function ensureFormulaDerivedPaySync(
+    proposal,
+    currentTable,
+    currentPerson,
+    identity,
+  ) {
+    const evidence = finalPayEvidence(currentTable, currentPerson);
+    if (!evidence.header || !evidence.formula) {
+      throw new Error(
+        "该人员的“实发合计”不是可重算公式，请明确提供实发合计后再同步代发薪",
+      );
+    }
+    const details = [];
+    let check = await ui.state.workbook.formulaReferencesIdentity(
+      "工资核对表",
+      ui.state.mainSheetName,
+      identity,
+    );
+    if (!check.rows.length || !check.cells.length) {
+      const reuse = proposal.auxiliaryReuse?.工资核对表;
+      if (!reuse) {
+        throw new Error(
+          "工资核对表未证明该人员与主工资表联动，且没有可安全复用的离职行",
+        );
+      }
+      details.push(
+        await ui.state.workbook.recyclePayrollCheckRow({
+          sheetName: "工资核对表",
+          mainSheetName: ui.state.mainSheetName,
+          mainRowNumber: currentPerson.rowNumber,
+          sourceRow: reuse.sourceRow,
+          targetRow: reuse.targetRow,
+          identity,
+          department: currentPerson.department,
+        }),
+      );
+      check = await ui.state.workbook.formulaReferencesIdentity(
+        "工资核对表",
+        ui.state.mainSheetName,
+        identity,
+      );
+      if (!check.rows.length || !check.cells.length) {
+        throw new Error("工资核对表复用后仍未形成主工资表公式联动");
+      }
+    }
+    details.push({
+      sheetName: "工资核对表",
+      rows: check.rows,
+      references: check.cells.length,
+    });
+
+    const payRows = await ui.state.workbook.matchingPersonnelRows(
+      "代发薪",
+      identity,
+    );
+    const linkOptions = {
+      sheetName: "代发薪",
+      mainSheetName: ui.state.mainSheetName,
+      mainRowNumber: currentPerson.rowNumber,
+      finalPayColumn: evidence.header.column,
+      cachedValue: evidence.cachedValue,
+      identity,
+    };
+    if (!payRows.rows.length) {
+      const reuse = proposal.auxiliaryReuse?.代发薪;
+      if (!reuse) {
+        throw new Error(
+          "代发薪未找到该人员，且没有可安全复用的离职行",
+        );
+      }
+      details.push(
+        await ui.state.workbook.recycleDisbursementRow({
+          ...linkOptions,
+          sourceRow: reuse.sourceRow,
+          targetRow: reuse.targetRow,
+          account: reuse.account,
+        }),
+      );
+    } else {
+      const linked =
+        await ui.state.workbook.linkDisbursementAmount(linkOptions);
+      if (!linked.updated) {
+        throw new Error("代发薪未能引用工资表的实发合计公式");
+      }
+      details.push(linked);
+    }
+    return details;
+  }
+
   async function applyWorkbookCellProposal(proposal) {
     const currentTable = await ui.state.workbook.getTable(
       ui.state.mainSheetName,
@@ -75,6 +175,18 @@
       if (!syncResults[0].updated) {
         throw new Error("代发薪未找到该人员，不能同步实发金额");
       }
+    } else if (
+      rules.isPayImpactingProposal(proposal) &&
+      !proposal.deferToExplicitFinalPay
+    ) {
+      syncResults.push(
+        ...(await ensureFormulaDerivedPaySync(
+          proposal,
+          currentTable,
+          currentPerson || proposal.person,
+          identity,
+        )),
+      );
     }
     ui.state.workbookSync.push({
       proposalId: proposal.id,
@@ -157,14 +269,20 @@
 
   async function applyWorkbookDisableProposal(proposal) {
     const identity = rules.personIdentity(proposal.person);
-    const archive = await ui.state.workbook.appendMappedPersonRow(
-      "离职名单",
-      rules.disableArchiveValues(
-        proposal,
-        ui.state.targetPeriod,
-        ui.state.table,
-      ),
-    );
+    const archive = proposal.archiveExisting
+      ? {
+          sheetName: proposal.archiveSheet || "离职名单",
+          rowNumber: proposal.archiveRow,
+          reused: true,
+        }
+      : await ui.state.workbook.appendMappedPersonRow(
+          "离职名单",
+          rules.disableArchiveValues(
+            proposal,
+            ui.state.targetPeriod,
+            ui.state.table,
+          ),
+        );
     const cleared = [];
     for (const sheetName of [
       ui.state.mainSheetName,
@@ -190,8 +308,9 @@
     ui.state.history.push({
       time: new Date().toLocaleTimeString("zh-CN"),
       label: `${proposal.person.maskedName} · 停用`,
-      detail:
-        "已写入离职名单待补日期记录，并从工资表、工资核对表和代发薪的在职名单移出；未推断离职结算金额。",
+      detail: proposal.archiveExisting
+        ? "已采用上月工资表分表中的既有离职记录，并从工资表、工资核对表和代发薪的在职名单移出。"
+        : "已写入离职名单待补日期记录，并从工资表、工资核对表和代发薪的在职名单移出；未推断离职结算金额。",
       kind: "disable-person",
     });
   }
@@ -235,6 +354,123 @@
       }
     }
     for (const proposal of selected) {
+      delete proposal.auxiliaryReuse;
+      delete proposal.deferToExplicitFinalPay;
+    }
+    const providers = [];
+    for (const proposal of selected.filter(
+      (item) => item.kind === "disable-person" && item.person,
+    )) {
+      const identity = rules.personIdentity(proposal.person);
+      providers.push({
+        proposal,
+        assignedKey: "",
+        工资核对表: await ui.state.workbook.matchingPersonnelRows(
+          "工资核对表",
+          identity,
+        ),
+        代发薪: await ui.state.workbook.matchingPersonnelRows(
+          "代发薪",
+          identity,
+        ),
+      });
+    }
+    const checkTemplateRow =
+      await ui.state.workbook.findPersonnelTemplateRow(
+        "工资核对表",
+        { requireFormula: true },
+      );
+    const payTemplateRow =
+      await ui.state.workbook.findPersonnelTemplateRow("代发薪");
+    const payGroups = new Map();
+    for (const proposal of selected.filter(
+      (item) =>
+        rules.isPayImpactingProposal(item) ||
+        rules.isFinalPayProposal(item),
+    )) {
+      const key = rules.proposalPersonKey(proposal);
+      if (!payGroups.has(key)) {
+        payGroups.set(key, []);
+      }
+      payGroups.get(key).push(proposal);
+    }
+    function reusableProvider(sheetName, personKey) {
+      return providers.find(
+        (provider) =>
+          provider[sheetName].rows.length &&
+          (!provider.assignedKey || provider.assignedKey === personKey),
+      );
+    }
+    for (const [personKey, items] of payGroups) {
+      const payInputs = items.filter(rules.isPayImpactingProposal);
+      if (!payInputs.length) {
+        continue;
+      }
+      if (items.some(rules.isFinalPayProposal)) {
+        for (const proposal of payInputs) {
+          proposal.deferToExplicitFinalPay = true;
+        }
+        continue;
+      }
+      const person = payInputs[0].person;
+      const identity = rules.personIdentity(person);
+      const evidence = finalPayEvidence(ui.state.table, person);
+      if (!evidence.header || !evidence.formula) {
+        throw new Error(
+          `${personKey} 的“实发合计”不是可重算公式，请在变动资料中明确提供实发合计`,
+        );
+      }
+      const reuse = {};
+      const check =
+        await ui.state.workbook.formulaReferencesIdentity(
+          "工资核对表",
+          ui.state.mainSheetName,
+          identity,
+        );
+      if (!check.rows.length || !check.cells.length) {
+        const provider = reusableProvider("工资核对表", personKey);
+        if (!provider || !checkTemplateRow) {
+          throw new Error(
+            `${personKey} 在工资核对表缺少公式覆盖，且本批没有可复用的离职行`,
+          );
+        }
+        provider.assignedKey = personKey;
+        reuse.工资核对表 = {
+          providerId: provider.proposal.id,
+          sourceRow: checkTemplateRow,
+          targetRow: provider.工资核对表.rows[0],
+        };
+      }
+      const payRows = await ui.state.workbook.matchingPersonnelRows(
+        "代发薪",
+        identity,
+      );
+      if (!payRows.rows.length) {
+        const provider = reusableProvider("代发薪", personKey);
+        const account = rules.proposalSourceAccount(items);
+        if (!provider || !payTemplateRow) {
+          throw new Error(
+            `${personKey} 在代发薪缺少人员行，且本批没有可复用的离职行`,
+          );
+        }
+        if (!rules.asText(account)) {
+          throw new Error(
+            `${personKey} 在代发薪缺少人员行，来源附件也没有工资卡号`,
+          );
+        }
+        provider.assignedKey = personKey;
+        reuse.代发薪 = {
+          providerId: provider.proposal.id,
+          sourceRow: payTemplateRow,
+          targetRow: provider.代发薪.rows[0],
+          account,
+        };
+      }
+      for (const proposal of payInputs) {
+        proposal.auxiliaryReuse = reuse;
+      }
+    }
+    for (const proposal of selected) {
       if (
         proposal.kind === "cell-change" &&
         (!proposal.person || !proposal.field)
@@ -243,22 +479,6 @@
       }
       if (proposal.kind === "disable-person" && !proposal.person) {
         throw new Error("存在未匹配人员的停用变动，已停止整批应用");
-      }
-      if (
-        proposal.kind === "cell-change" &&
-        rules.isPayImpactingProposal(proposal)
-      ) {
-        const references =
-          await ui.state.workbook.formulaReferencesIdentity(
-            "工资核对表",
-            ui.state.mainSheetName,
-            rules.personIdentity(proposal.person),
-          );
-        if (!references.rows.length || !references.cells.length) {
-          throw new Error(
-            "工资核对表未证明该人员与主工资表联动，已停止工资变动",
-          );
-        }
       }
     }
   }

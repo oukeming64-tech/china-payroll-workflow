@@ -171,6 +171,13 @@
     const dataStartRow = headerRow + (subheaders.length ? 1 : 0);
 
     const rows = [];
+    const hiddenRows = new Set(
+      api
+        .elementsByLocalName(sheetRecord.document, "row")
+        .filter((row) => row.getAttribute("hidden") === "1")
+        .map((row) => Number(row.getAttribute("r")))
+        .filter(Number.isFinite),
+    );
     const sortedRows = [...cellsByRow.keys()]
       .filter(
         (row) =>
@@ -202,6 +209,7 @@
       }
       rows.push({
         rowNumber,
+        hidden: hiddenRows.has(rowNumber),
         values,
         cells,
         get(headerOrColumn) {
@@ -385,6 +393,7 @@
       }
       dataRows.push({
         rowNumber: index + 1,
+        hidden: Boolean(metadataRow.hidden),
         values,
         cells,
         get(headerOrColumn) {

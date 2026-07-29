@@ -94,6 +94,12 @@
     ui.state.table = await ui.state.workbook.getTable(
       ui.state.mainSheetName,
     );
+    ui.state.disabledRows = new Set([
+      ...ui.state.disabledRows,
+      ...ui.state.table.rows
+        .filter((row) => row.hidden)
+        .map((row) => row.rowNumber),
+    ]);
     ui.state.externalLinks =
       await ui.state.workbook.analyzeExternalLinks();
     ui.state.formulaDiagnostics =
@@ -192,6 +198,12 @@
   }
 
   async function finalizeWorkspace() {
+    ui.state.disabledRows = new Set([
+      ...ui.state.disabledRows,
+      ...ui.state.table.rows
+        .filter((row) => row.hidden)
+        .map((row) => row.rowNumber),
+    ]);
     if (ui.state.route.id === "january-rollover") {
       await applyJanuaryRoute();
     } else {
@@ -200,6 +212,7 @@
     await applyMonthlyBusinessRules();
     const markers = await ui.state.workbook.findMonthMarkers(
       ui.state.basePeriod,
+      ui.state.mainSheetName,
     );
     ui.state.monthMarkers = await ui.state.workbook.updateMonthMarkers(
       markers,
@@ -220,6 +233,40 @@
       );
     ui.state.personnelSheets =
       await ui.state.workbook.analyzePersonnelSheets();
+    ui.state.workbookEvidence =
+      rules.collectWorkbookBusinessEvidence(
+        ui.state.personnelSheets,
+        ui.state.table,
+        ui.state.basePeriod,
+        ui.state.targetPeriod,
+      );
+    ui.state.proposals = ui.state.proposals.filter(
+      (proposal) => !proposal.workbookEvidence,
+    );
+    ui.state.proposals.push(
+      ...rules.workbookEvidenceProposals(
+        ui.state.workbookEvidence,
+        ui.state.targetPeriod,
+      ),
+    );
+    ui.state.sources = ui.state.sources.filter(
+      (source) => !source.workbookEvidence,
+    );
+    ui.state.sources.push({
+      name: ui.state.workingSourceFile.name,
+      category: "上月工资表业务分表",
+      sheetName: ui.state.personnelSheets
+        .map((sheet) => sheet.name)
+        .join("、"),
+      mappingCount:
+        ui.state.workbookEvidence.recognizedRegions.length,
+      proposalCount: ui.state.proposals.filter(
+        (proposal) => proposal.workbookEvidence,
+      ).length,
+      warnings: ui.state.workbookEvidence.warnings,
+      errors: ui.state.workbookEvidence.errors,
+      workbookEvidence: true,
+    });
     ui.resetAttachmentState();
     ui.state.history = [
       {

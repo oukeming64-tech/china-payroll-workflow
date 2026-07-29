@@ -4,6 +4,12 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="工资表月度生成工具" />
+    <meta
+      http-equiv="Cache-Control"
+      content="no-cache, no-store, must-revalidate"
+    />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>工资表工具</title>
     <link rel="icon" href="data:," />
     <link rel="stylesheet" href="./styles/base.css" />
@@ -12,9 +18,16 @@
   </head>
   <body>
     <header class="topbar">
-      <a class="brand" href="./index.html" aria-label="返回开始页">
+      <a
+        class="brand"
+        href="./index.html?build=20260729.3"
+        aria-label="返回开始页"
+      >
         <span class="brand-mark" aria-hidden="true">薪</span>
-        <span><strong>工资表工具</strong></span>
+        <span>
+          <strong>工资表工具</strong>
+          <small id="appBuildStamp">修复版 2026.07.29-3</small>
+        </span>
       </a>
     </header>
 
@@ -544,6 +557,7 @@
     <script src="./excel/schema.js"></script>
     <script src="./excel/cumulative.js"></script>
     <script src="./excel/personnel.js"></script>
+    <script src="./excel/payroll-sync.js?build=20260729.3"></script>
     <script src="./excel/workbook.js"></script>
     <script src="./excel/source-workbook.js"></script>
     <script src="./excel/docx-tables.js"></script>
@@ -555,17 +569,19 @@
     <script src="./rules/natural-language.js"></script>
     <script src="./rules/tabular-changes.js"></script>
     <script src="./rules/external-source.js"></script>
-    <script src="./rules/monthly-change-sources.js"></script>
+    <script src="./rules/monthly-change-sources.js?build=20260729.3"></script>
     <script src="./rules/salary-event-proration.js"></script>
     <script src="./rules/employment-events.js"></script>
     <script src="./rules/salary-events.js"></script>
-    <script src="./rules/attendance-deductions.js"></script>
-    <script src="./rules/business-sources.js"></script>
+    <script src="./rules/attendance-deductions.js?build=20260729.3"></script>
+    <script src="./rules/business-sources.js?build=20260729.3"></script>
+    <script src="./rules/workbook-evidence-changes.js"></script>
+    <script src="./rules/workbook-evidence.js"></script>
     <script src="./rules/attachment-periods.js"></script>
     <script src="./rules/labor-fee-review.js"></script>
     <script src="./rules/attachment-resolution.js"></script>
     <script src="./rules/attachment-batch.js"></script>
-    <script src="./rules/workbook-personnel.js"></script>
+    <script src="./rules/workbook-personnel.js?build=20260729.3"></script>
     <script src="./rules/social-base-july.js"></script>
     <script src="./payroll-engine.js"></script>
     <script src="./ui/state.js"></script>
@@ -574,9 +590,9 @@
     <script src="./ui/requirements-render.js"></script>
     <script src="./ui/workbook-flow.js"></script>
     <script src="./ui/attachment-flow.js"></script>
-    <script src="./ui/personnel-sync-flow.js"></script>
+    <script src="./ui/personnel-sync-flow.js?build=20260729.3"></script>
     <script src="./ui/source-regions-flow.js"></script>
-    <script src="./ui/change-flow.js"></script>
+    <script src="./ui/change-flow.js?build=20260729.3"></script>
     <script src="./ui/social-base-flow.js"></script>
     <script src="./ui/export-flow.js"></script>
     <script src="./app.js"></script>

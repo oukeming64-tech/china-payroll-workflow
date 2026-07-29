@@ -14,6 +14,8 @@
     !rules?.proposalsFromSalaryEventSource ||
     !rules?.proposalsFromAttendanceSource ||
     !rules?.proposalsFromBusinessSource ||
+    !rules?.structuredWorkbookChangeResults ||
+    !rules?.collectWorkbookBusinessEvidence ||
     !rules?.auditLaborFeeAmounts
   ) {
     throw new Error("工资规则模块加载顺序不完整");

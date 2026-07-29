@@ -65,7 +65,9 @@
         continue;
       }
       const matches = table.rows.filter(
-        (row) => normalized(row.values.get(header.column)) === value,
+        (row) =>
+          !row.hidden &&
+          normalized(row.values.get(header.column)) === value,
       );
       if (matches.length) {
         return { matchedBy: key, rows: matches };
@@ -77,15 +79,27 @@
   async function analyzePersonnelSheets(workbook) {
     const sheets = [];
     for (const sheet of workbook.sheets) {
-      const table = await workbook.getTable(sheet.name);
-      const identities = identityHeaders(table);
-      const identityHeaderCount = Object.values(identities).filter(Boolean).length;
+      const tables = workbook.getTables
+        ? await workbook.getTables(sheet.name)
+        : [await workbook.getTable(sheet.name)];
+      const table = tables[0];
+      const identityHeaderCount = Math.max(
+        0,
+        ...tables.map((item) =>
+          Object.values(identityHeaders(item)).filter(Boolean).length
+        ),
+      );
       sheets.push({
         name: sheet.name,
         role: PERSONNEL_SHEET_ROLES[sheet.name] || "unknown",
         table,
+        tables,
+        regionCount: tables.length,
         identityHeaderCount,
-        formulaCount: table.formulaCount,
+        formulaCount: Math.max(
+          0,
+          ...tables.map((item) => item.formulaCount),
+        ),
       });
     }
     return sheets;

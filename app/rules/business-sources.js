@@ -108,8 +108,10 @@
     return (
       BUSINESS_SOURCE_PROFILES.find(
         (profile) =>
-          normalizedFilenameMatches(profile, fileName) &&
-          profileHeadersMatch(profile, table),
+          (profile.structureMatch === "attendance" &&
+            api.isAttendanceSourceTable(table)) ||
+          (normalizedFilenameMatches(profile, fileName) &&
+            profileHeadersMatch(profile, table)),
       ) || null
     );
   }
@@ -347,6 +349,7 @@
           inputValue,
           mapping,
           sourceKind: profile.id,
+          sourceValues: Object.fromEntries(sourceTable.headers.map((header) => [header.name, sourceRow.values.get(header.column)])),
         });
         if (match.status !== "matched") {
           proposal.status = "error";

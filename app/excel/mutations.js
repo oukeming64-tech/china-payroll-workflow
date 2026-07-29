@@ -254,6 +254,7 @@
     sheetName,
     sourceRowNumber,
     targetRowNumber,
+    options = {},
   ) {
     const sheetRecord = await workbook.loadSheetRecord(sheetName);
     const sheetData = api.firstByLocalName(sheetRecord.document, "sheetData");
@@ -270,19 +271,27 @@
     const existingTarget = rows.find(
       (row) => Number(row.getAttribute("r")) === Number(targetRowNumber),
     );
-    if (
-      existingTarget &&
-      api.directChildrenByLocalName(existingTarget, "c").some((cell) => {
-        const descriptor = api.cellDescriptor(cell, workbook.sharedStrings);
-        return (
-          descriptor.hasFormula ||
-          (descriptor.value !== null &&
-            descriptor.value !== undefined &&
-            String(descriptor.value).trim() !== "")
-        );
-      })
-    ) {
-      throw new Error("目标行已有内容，不能作为新增人员模板行");
+    if (existingTarget) {
+      const replaceHiddenTarget =
+        options.replaceHiddenTarget &&
+        existingTarget.getAttribute("hidden") === "1";
+      const hasContent = api
+        .directChildrenByLocalName(existingTarget, "c")
+        .some((cell) => {
+          const descriptor = api.cellDescriptor(
+            cell,
+            workbook.sharedStrings,
+          );
+          return (
+            descriptor.hasFormula ||
+            (descriptor.value !== null &&
+              descriptor.value !== undefined &&
+              String(descriptor.value).trim() !== "")
+          );
+        });
+      if (hasContent && !replaceHiddenTarget) {
+        throw new Error("目标行已有内容，不能作为新增人员模板行");
+      }
     }
 
     const rowDelta = Number(targetRowNumber) - Number(sourceRowNumber);
